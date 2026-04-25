@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JWT Pentest Helper — Attack Lab</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>JWT Attack Lab</h1>
+    <p class="lead">Use only where you have explicit permission.</p>
+
+    <section class="card">
+      <h2>Source token</h2>
+      <textarea id="sourceToken" rows="5" spellcheck="false" placeholder="eyJhbGciOi..."></textarea>
+      <div class="actions">
+        <button id="reloadBtn">Decode token</button>
+      </div>
+      <p id="decodeError" class="error" aria-live="polite"></p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h3>Decoded header</h3>
+        <pre id="headerOut">—</pre>
+      </article>
+      <article class="card">
+        <h3>Decoded payload</h3>
+        <pre id="payloadOut">—</pre>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Payload editor (for crafted variants)</h2>
+      <textarea id="payloadEditor" rows="7" spellcheck="false"></textarea>
+      <small>Keep valid JSON. This editor is used for generated attack candidates.</small>
+    </section>
+
+    <section class="card">
+      <h2>Attack presets (PortSwigger lab mapping)</h2>
+      <div class="attack-list">
+        <button data-attack="unverified-signature">Unverified Signature</button>
+        <button data-attack="flawed-signature">Flawed Signature Verification (alg=none)</button>
+        <button data-attack="weak-signing-key">Weak Signing Key</button>
+        <button data-attack="jwk-header-injection">jwk Header Injection</button>
+        <button data-attack="jku-header-injection">jku Header Injection</button>
+        <button data-attack="kid-path-traversal">kid Header Path Traversal</button>
+      </div>
+    </section>
+
+    <section id="attackInputSection" class="card hidden">
+      <h2>Attack-specific input</h2>
+      <label id="extraInputLabel" for="extraInput"></label>
+      <input id="extraInput" type="text" />
+      <small id="extraInputHelp"></small>
+
+      <div id="jwkTools" class="hidden">
+        <label for="jwkAlgSelect">JWK generation algorithm</label>
+        <select id="jwkAlgSelect">
+          <option>HS256</option><option>HS384</option><option>HS512</option>
+          <option>RS256</option><option>RS384</option><option>RS512</option>
+          <option>PS256</option><option>PS384</option><option>PS512</option>
+          <option>ES256</option><option>ES384</option><option>ES512</option>
+          <option>EdDSA</option>
+        </select>
+        <div class="actions">
+          <button id="genJwkAlgKeyBtn" type="button" class="secondary">Generate key for selected alg</button>
+        </div>
+        <small id="jwkAlgHelp">Generates keypair/secret, inserts public JWK into attack input, and uses private key for signing.</small>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Generated attack candidate</h2>
+      <div class="actions">
+        <button id="generateBtn">Generate</button>
+        <button id="copyBtn" class="secondary">Copy Result</button>
+      </div>
+      <textarea id="resultToken" rows="8" readonly></textarea>
+      <h3>Notes</h3>
+      <pre id="attackNotes">Choose an attack preset and click Generate.</pre>
+    </section>
+  </main>
+
+  <script src="attacks.js"></script>
+</body>
+</html>
