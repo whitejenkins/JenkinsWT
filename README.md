@@ -5,7 +5,7 @@ A lightweight single-page web tool to assist **authorized** JWT security testing
 ## Features
 
 - Single page UI (`index.html`) with source JWT decode, payload editing, attack presets, and generated token output.
-- Attack presets mapped to labs:
+- Attack presets available:
   - JWT authentication bypass via unverified signature.
   - JWT authentication bypass via flawed signature verification.
   - JWT authentication bypass via weak signing key.
