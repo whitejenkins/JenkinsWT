@@ -92,3 +92,5 @@ button.secondary, .button.secondary {
 
 .error { color: var(--error); }
 small { color: var(--muted); }
+
+.hidden { display: none; }
