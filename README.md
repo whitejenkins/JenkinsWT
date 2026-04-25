@@ -28,7 +28,7 @@ For `jku Header Injection`, the Attack-specific input now also contains step-by-
 Weak Signing Key step guide now includes Hashcat command:
 `hashcat -a 0 -m 16500 <YOUR-JWT> /path/to/jwt.secrets.list`
 
-Kid Path Traversal flow is now fully automated: no Attack-specific input is shown; tool sets traversal `kid` and signs with a null-byte key automatically (source alg/payload are preserved).
+Kid Path Traversal flow is automated, and Attack-specific input lets you choose HMAC signing algorithm (`HS256`/`HS384`/`HS512`). Tool then sets traversal `kid` and signs with a null-byte key automatically (source payload preserved).
 
 
 

