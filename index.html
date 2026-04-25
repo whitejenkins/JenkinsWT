@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JWT Pentest Helper</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>JWT Pentest Helper</h1>
+    <p class="lead">For authorized security testing only.</p>
+
+    <section class="card">
+      <h2>Step 1: Provide Source JWT</h2>
+      <label for="sourceToken">Original JWT token</label>
+      <textarea id="sourceToken" rows="8" placeholder="eyJhbGciOi..." spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="continueBtn">Continue to Attack Lab</button>
+      </div>
+      <p id="inputError" class="error" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script src="index.js"></script>
+</body>
+</html>
