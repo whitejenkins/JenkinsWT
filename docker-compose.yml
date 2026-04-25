@@ -1,0 +1,9 @@
+services:
+  jwt-pentest-helper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jwt-pentest-helper
+    ports:
+      - "80:80"
+    restart: unless-stopped
