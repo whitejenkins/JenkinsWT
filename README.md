@@ -24,6 +24,8 @@ Inside **jwk Header Injection** you can choose key generation/signing algorithm:
 - `EdDSA` (Ed25519)
 
 The app now follows a simple flow: paste JWT -> choose algorithm -> click generate (or Embed JWK & Sign). It auto-generates key material, embeds a minimal public JWK, removes conflicting header params (`kid`, `jku`), and signs automatically.
+For `jku Header Injection`, the Attack-specific input now also contains step-by-step guidance, JWKS generation output, and action buttons to generate key/copy JWKS/sign token.
+
 
 ## Run
 

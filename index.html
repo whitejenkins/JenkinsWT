@@ -70,6 +70,20 @@
         </div>
         <small id="jwkAlgHelp">Burp-like flow: generate key -> jwk is embedded in header -> token is signed with matching private key.</small>
       </div>
+
+      <div id="jkuTools" class="hidden">
+        <label for="jkuKidInput">KID for JWKS</label>
+        <input id="jkuKidInput" type="text" placeholder="auto-generated-kid" />
+        <div class="actions">
+          <button id="genJkuRsaBtn" type="button" class="secondary">Generate RSA key for JKU</button>
+          <button id="copyJwksBtn" type="button" class="secondary">Copy JWKS JSON</button>
+          <button id="signJkuBtn" type="button">Sign JKU token now</button>
+        </div>
+        <textarea id="jwksOutput" rows="5" readonly></textarea>
+      </div>
+
+      <h3>Step-by-step</h3>
+      <pre id="attackSteps">Select an attack to see guided steps.</pre>
     </section>
 
     <section class="card">
