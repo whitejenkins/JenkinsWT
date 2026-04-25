@@ -25,6 +25,11 @@ Inside **jwk Header Injection** you can choose key generation/signing algorithm:
 
 The app now follows a simple flow: paste JWT -> choose algorithm -> click generate (or Embed JWK & Sign). It auto-generates key material, embeds a minimal public JWK, removes conflicting header params (`kid`, `jku`), and signs automatically.
 For `jku Header Injection`, the Attack-specific input now also contains step-by-step guidance, JWKS generation output, and action buttons to generate key/copy JWKS/sign token.
+Weak Signing Key step guide now includes Hashcat command:
+`hashcat -a 0 -m 16500 <YOUR-JWT> /path/to/jwt.secrets.list`
+
+Kid Path Traversal flow now explicitly supports AA== (Base64 null-byte key) as signing-key input.
+
 
 
 ## Run

