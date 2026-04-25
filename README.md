@@ -23,7 +23,7 @@ Inside **jwk Header Injection** you can choose key generation/signing algorithm:
 - `ES256`, `ES384`, `ES512`
 - `EdDSA` (Ed25519)
 
-The app generates key material for selected algorithm, inserts public JWK into the JWK input, and auto-signs when generated key matches inserted JWK.
+The app generates key material for selected algorithm, inserts public JWK into the JWK input, and auto-signs when generated key matches inserted JWK. You can also use the "Embed JWK & Sign token" button for Burp-like flow in one step.
 
 ## Run
 

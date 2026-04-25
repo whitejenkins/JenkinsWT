@@ -52,7 +52,7 @@
     <section id="attackInputSection" class="card hidden">
       <h2>Attack-specific input</h2>
       <label id="extraInputLabel" for="extraInput"></label>
-      <input id="extraInput" type="text" />
+      <textarea id="extraInput" rows="4" spellcheck="false"></textarea>
       <small id="extraInputHelp"></small>
 
       <div id="jwkTools" class="hidden">
@@ -66,8 +66,9 @@
         </select>
         <div class="actions">
           <button id="genJwkAlgKeyBtn" type="button" class="secondary">Generate key for selected alg</button>
+          <button id="embedJwkSignBtn" type="button">Embed JWK & Sign token</button>
         </div>
-        <small id="jwkAlgHelp">Generates keypair/secret, inserts public JWK into attack input, and uses private key for signing.</small>
+        <small id="jwkAlgHelp">Burp-like flow: generate key -> jwk is embedded in header -> token is signed with matching private key.</small>
       </div>
     </section>
 

