@@ -4,22 +4,27 @@ A lightweight single-page web tool to assist **authorized** JWT security testing
 
 ## Features
 
-- Single page UI (`index.html`) with:
-  - Source JWT input + decoding (header/payload).
-  - Payload editor for crafted variants.
-  - Attack presets mapped to these labs:
-    - JWT authentication bypass via unverified signature.
-    - JWT authentication bypass via flawed signature verification.
-    - JWT authentication bypass via weak signing key.
-    - JWT authentication bypass via jwk header injection.
-    - JWT authentication bypass via jku header injection.
-    - JWT authentication bypass via kid header path traversal.
+- Single page UI (`index.html`) with source JWT decode, payload editing, attack presets, and generated token output.
+- Attack presets mapped to labs:
+  - JWT authentication bypass via unverified signature.
+  - JWT authentication bypass via flawed signature verification.
+  - JWT authentication bypass via weak signing key.
+  - JWT authentication bypass via jwk header injection.
+  - JWT authentication bypass via jku header injection.
+  - JWT authentication bypass via kid header path traversal.
+- Dynamic attack-specific inputs shown only when needed.
+- JWK helper buttons for jwk attack: generate RSA-2048/RSA-4096 and auto-insert public JWK.
 
-- Dynamic attack-specific input:
-  - Input field appears only for attacks that require user data.
-  - Example: Weak Signing Key requires an explicit user-provided secret.
+## Multi-algorithm signer support
 
-- HS256 signing helper implemented in browser via Web Crypto API.
+The signer playground supports token signing with:
+- `HS256`, `HS384`, `HS512`
+- `RS256`, `RS384`, `RS512`
+- `PS256`, `PS384`, `PS512`
+- `ES256`, `ES384`, `ES512`
+- `EdDSA` (Ed25519)
+
+You can generate key pairs for asymmetric algorithms directly in browser and paste/use private JWK in the signer field.
 
 ## Run
 
@@ -33,7 +38,7 @@ Open `index.html` directly in a modern browser.
 docker compose up --build
 ```
 
-Then open: `http://localhost:8080`
+Then open: `http://localhost`
 
 ## Disclaimer
 

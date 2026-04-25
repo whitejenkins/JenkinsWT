@@ -34,7 +34,7 @@ h1, h2, h3 { margin-top: 0; }
   margin-bottom: 16px;
 }
 
-textarea, input {
+textarea, input, select {
   width: 100%;
   background: #10162a;
   color: var(--text);

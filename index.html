@@ -54,6 +54,29 @@
       <label id="extraInputLabel" for="extraInput"></label>
       <input id="extraInput" type="text" />
       <small id="extraInputHelp"></small>
+      <div id="jwkTools" class="actions hidden">
+        <button id="genRsa2048Btn" type="button" class="secondary">Generate RSA-2048</button>
+        <button id="genRsa4096Btn" type="button" class="secondary">Generate RSA-4096</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Algorithm signer playground</h2>
+      <label for="signAlg">Algorithm</label>
+      <select id="signAlg">
+        <option>HS256</option><option>HS384</option><option>HS512</option>
+        <option>RS256</option><option>RS384</option><option>RS512</option>
+        <option>PS256</option><option>PS384</option><option>PS512</option>
+        <option>ES256</option><option>ES384</option><option>ES512</option>
+        <option>EdDSA</option>
+      </select>
+      <label for="signKeyInput">Key material input (secret or private JWK JSON)</label>
+      <textarea id="signKeyInput" rows="4" spellcheck="false" placeholder='For HS*: plain secret. For others: private JWK JSON.'></textarea>
+      <div class="actions">
+        <button id="genKeyBtn" type="button" class="secondary">Generate key for selected alg</button>
+        <button id="signCurrentBtn" type="button">Sign current payload with selected alg</button>
+      </div>
+      <small id="signerHelp">For asymmetric algorithms, generated private JWK is inserted automatically.</small>
     </section>
 
     <section class="card">
