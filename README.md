@@ -31,7 +31,17 @@ A lightweight 2-page web tool to assist **authorized** JWT security testing.
 
 ## Run
 
+### Option 1: Open directly
+
 Open `index.html` directly in a modern browser.
+
+### Option 2: Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Then open: `http://localhost:8080`
 
 ## Disclaimer
 
