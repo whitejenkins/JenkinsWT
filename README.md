@@ -13,18 +13,17 @@ A lightweight single-page web tool to assist **authorized** JWT security testing
   - JWT authentication bypass via jku header injection.
   - JWT authentication bypass via kid header path traversal.
 - Dynamic attack-specific inputs shown only when needed.
-- JWK helper buttons for jwk attack: generate RSA-2048/RSA-4096 and auto-insert public JWK.
 
-## Multi-algorithm signer support
+## JWK header injection: algorithm generation options
 
-The signer playground supports token signing with:
+Inside **jwk Header Injection** you can choose key generation/signing algorithm:
 - `HS256`, `HS384`, `HS512`
 - `RS256`, `RS384`, `RS512`
 - `PS256`, `PS384`, `PS512`
 - `ES256`, `ES384`, `ES512`
 - `EdDSA` (Ed25519)
 
-You can generate key pairs for asymmetric algorithms directly in browser and paste/use private JWK in the signer field.
+The app generates key material for selected algorithm, inserts public JWK into the JWK input, and auto-signs when generated key matches inserted JWK.
 
 ## Run
 

