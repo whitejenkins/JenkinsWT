@@ -43,7 +43,7 @@ embedJwkSignBtn.addEventListener('click', () => generateJwkAttackToken(true));
 genJkuRsaBtn.addEventListener('click', generateJkuKeyMaterial);
 copyJwksBtn.addEventListener('click', copyJwksJson);
 signJkuBtn.addEventListener('click', () => generateJwkAttackToken(true));
-confusionMode.addEventListener('change', updateConfusionInputHint);
+if (confusionMode) confusionMode.addEventListener('change', updateConfusionInputHint);
 
 for (const btn of document.querySelectorAll('[data-attack]')) {
   btn.addEventListener('click', () => {
@@ -224,6 +224,8 @@ function configureInputForAttack(key) {
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
 
   if (key === 'algorithm-confusion') {
+    attackInputSection.classList.remove('hidden');
+    if (confusionMode) confusionMode.value = confusionMode.value || 'rs_hs';
     showInput('Key input', '{"keys":[{"kty":"RSA","n":"...","e":"AQAB"}]}', 'RS→HS: paste full jwks.json content. HS→RS: optional private key (PEM/JWK) for signing.');
     confusionTools.classList.remove('hidden');
     updateConfusionInputHint();
