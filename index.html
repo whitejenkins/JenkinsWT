@@ -42,6 +42,7 @@
       <div class="attack-list">
         <button data-attack="unverified-signature">Unverified Signature</button>
         <button data-attack="flawed-signature">Flawed Signature Verification (alg=none)</button>
+        <button data-attack="algorithm-confusion">Algorithm Confusion (RS↔HS)</button>
         <button data-attack="weak-signing-key">Weak Signing Key</button>
         <button data-attack="jwk-header-injection">jwk Header Injection</button>
         <button data-attack="jku-header-injection">jku Header Injection</button>
@@ -93,6 +94,17 @@
           <option>EdDSA</option>
         </select>
         <small>Tool sets kid traversal path and signs automatically with selected algorithm.</small>
+      </div>
+
+      <div id="algorithmConfusionTools" class="hidden">
+        <label for="algConfusionDirection">Direction</label>
+        <select id="algConfusionDirection">
+          <option value="rs-to-hs">RS → HS</option>
+          <option value="hs-to-rs">HS → RS</option>
+        </select>
+        <small>
+          Paste full <code>jwks.json</code> below. Tool auto-extracts required key fields from <code>keys[]</code>.
+        </small>
       </div>
 
       <h3>Step-by-step</h3>
