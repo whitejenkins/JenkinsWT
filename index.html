@@ -56,6 +56,16 @@
       <textarea id="extraInput" rows="4" spellcheck="false"></textarea>
       <small id="extraInputHelp"></small>
 
+
+      <div id="confusionTools" class="hidden">
+        <label for="confusionMode">Confusion mode</label>
+        <select id="confusionMode">
+          <option value="rs_hs">RS→HS</option>
+          <option value="hs_rs">HS→RS</option>
+        </select>
+        <small id="confusionHelp">RS→HS: paste server JWKS/JWK/PEM. HS→RS: optional private key (JWK/PEM), otherwise auto-generate RSA key.</small>
+      </div>
+
       <div id="jwkTools" class="hidden">
         <label for="jwkAlgSelect">JWK generation algorithm</label>
         <select id="jwkAlgSelect">
