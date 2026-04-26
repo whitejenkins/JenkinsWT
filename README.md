@@ -41,7 +41,7 @@ For **Algorithm Confusion** preset:
 - Tool auto-selects key material from JWKS and converts header algorithm automatically.
 
 Notes:
-- `RS → HS`: tool extracts RSA public JWK (`n`, `e`), converts it to PEM, and uses PEM text as HMAC secret for signing.
+- `RS → HS`: tool extracts RSA public JWK (`n`, `e`), converts it to PEM, Base64-encodes PEM, and uses that value as HMAC secret for signing.
 - `HS → RS`: tool requires RSA private JWK (`d` present) inside provided JWKS and signs as `RS*`.
 
 

