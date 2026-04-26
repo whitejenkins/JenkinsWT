@@ -39,7 +39,7 @@
     </section>
 
     <section class="card">
-      <h2>Attack presets (PortSwigger lab mapping)</h2>
+      <h2>Attack presets</h2>
       <div class="attack-list">
         <button data-attack="unverified-signature">Unverified Signature</button>
         <button data-attack="flawed-signature">Flawed Signature Verification (alg=none)</button>
@@ -94,6 +94,17 @@
           <option>EdDSA</option>
         </select>
         <small>Tool sets kid traversal path and signs automatically with selected algorithm.</small>
+      </div>
+
+      <div id="algorithmConfusionTools" class="hidden">
+        <label for="algConfusionDirection">Direction</label>
+        <select id="algConfusionDirection">
+          <option value="rs-to-hs">RS → HS</option>
+          <option value="hs-to-rs">HS → RS</option>
+        </select>
+        <small>
+          Paste full <code>jwks.json</code> below. Tool auto-extracts required key fields from <code>keys[]</code>.
+        </small>
       </div>
 
       <h3>Step-by-step</h3>
