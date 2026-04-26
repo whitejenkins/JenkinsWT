@@ -355,7 +355,7 @@ function getAttackSteps(key) {
   if (key === 'algorithm-confusion') {
     return [
       '1) Paste source JWT and click Decode token.',
-      '2) Edit payload as needed for your test case (for example, set "sub":"administrator").',
+      '2) Edit payload as needed for your test case.',
       '3) In Attack-specific input choose direction: RS → HS or HS → RS.',
       '4) Paste full jwks.json (with keys array) from target endpoint.',
       '5) Click Generate. Tool auto-extracts key params and signs token with converted alg.',

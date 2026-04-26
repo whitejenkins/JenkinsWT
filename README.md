@@ -1,65 +1,46 @@
 # JWT Pentest Helper
 
-A lightweight single-page web tool to assist **authorized** JWT security testing.
+Web-инструмент для **авторизованного** тестирования JWT: декодирование, редактирование payload/header и генерация тестовых токенов под распространённые классы уязвимостей.
 
-## Features
+## Какие атаки покрываются
 
-- Single page UI (`index.html`) with source JWT decode, payload editing, attack presets, and generated token output.
-- Attack presets available:
-  - JWT authentication bypass via unverified signature.
-  - JWT authentication bypass via flawed signature verification.
-  - JWT authentication bypass via algorithm confusion (RS↔HS).
-  - JWT authentication bypass via weak signing key.
-  - JWT authentication bypass via jwk header injection.
-  - JWT authentication bypass via jku header injection.
-  - JWT authentication bypass via kid header path traversal.
-- Dynamic attack-specific inputs shown only when needed.
+- Unverified Signature
+- Flawed Signature Verification (`alg=none`)
+- Algorithm Confusion (`RS↔HS`)
+- Weak Signing Key
+- `jwk` Header Injection
+- `jku` Header Injection
+- `kid` Header Path Traversal
 
-## JWK header injection: algorithm generation options
+## Установка и запуск
 
-Inside **jwk Header Injection** you can choose key generation/signing algorithm:
-- `HS256`, `HS384`, `HS512`
-- `RS256`, `RS384`, `RS512`
-- `PS256`, `PS384`, `PS512`
-- `ES256`, `ES384`, `ES512`
-- `EdDSA` (Ed25519)
+### Вариант 1: локально без контейнера
 
-The app now follows a simple flow: paste JWT -> choose algorithm -> click generate (or Embed JWK & Sign). It auto-generates key material, embeds a minimal public JWK, removes conflicting header params (`kid`, `jku`), and signs automatically.
-For `jku Header Injection`, the Attack-specific input now also contains step-by-step guidance, JWKS generation output, and action buttons to generate key/copy JWKS/sign token.
-Weak Signing Key step guide now includes Hashcat command:
-`hashcat -a 0 -m 16500 <YOUR-JWT> /path/to/jwt.secrets.list`
+Откройте `index.html` в современном браузере.
 
-Kid Path Traversal flow is automated, and Attack-specific input lets you choose HMAC signing algorithm (`HS256`/`HS384`/`HS512`). Tool then sets traversal `kid` and signs with a null-byte key automatically (source payload preserved).
-
-## Algorithm Confusion (RS↔HS)
-
-For **Algorithm Confusion** preset:
-- Choose conversion direction in Attack-specific input:
-  - `RS → HS`
-  - `HS → RS`
-- Paste full `jwks.json` (entire object with `keys` array).
-- Tool auto-selects key material from JWKS and converts header algorithm automatically.
-
-Notes:
-- `RS → HS`: tool extracts RSA public JWK (`n`, `e`), converts it to PEM, Base64-encodes PEM, places it into `oct` JWK `k` format, and signs with decoded raw key bytes (Burp-compatible flow).
-- `HS → RS`: tool requires RSA private JWK (`d` present) inside provided JWKS and signs as `RS*`.
-
-
-
-## Run
-
-### Option 1: Open directly
-
-Open `index.html` directly in a modern browser.
-
-### Option 2: Docker Compose
+### Вариант 2: Docker Compose
 
 ```bash
 docker compose up --build
 ```
 
-Then open: `http://localhost`
+После запуска откройте: `http://localhost`
+
+## Базовый сценарий использования
+
+1. Вставьте исходный JWT.
+2. Нажмите **Decode token**.
+3. Отредактируйте payload/header при необходимости.
+4. Выберите нужный пресет атаки.
+5. Заполните Attack-specific input (если нужен этим пресетом).
+6. Нажмите **Generate** и используйте полученный токен в тесте.
+
+> Важно: инструмент не подставляет значения claims за пользователя; всё берётся из введённого JWT и ваших входных данных.
+
+## Скриншоты
+
+
 
 ## Disclaimer
 
-Use this tool only on systems you own or have explicit written permission to test.
+Используйте только на системах, для которых у вас есть явное разрешение на тестирование.
