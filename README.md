@@ -8,6 +8,7 @@ A lightweight single-page web tool to assist **authorized** JWT security testing
 - Attack presets available:
   - JWT authentication bypass via unverified signature.
   - JWT authentication bypass via flawed signature verification.
+  - JWT authentication bypass via algorithm confusion (RS↔HS).
   - JWT authentication bypass via weak signing key.
   - JWT authentication bypass via jwk header injection.
   - JWT authentication bypass via jku header injection.
@@ -29,6 +30,19 @@ Weak Signing Key step guide now includes Hashcat command:
 `hashcat -a 0 -m 16500 <YOUR-JWT> /path/to/jwt.secrets.list`
 
 Kid Path Traversal flow is automated, and Attack-specific input lets you choose HMAC signing algorithm (`HS256`/`HS384`/`HS512`). Tool then sets traversal `kid` and signs with a null-byte key automatically (source payload preserved).
+
+## Algorithm Confusion (RS↔HS)
+
+For **Algorithm Confusion** preset:
+- Choose conversion direction in Attack-specific input:
+  - `RS → HS`
+  - `HS → RS`
+- Paste full `jwks.json` (entire object with `keys` array).
+- Tool auto-selects key material from JWKS and converts header algorithm automatically.
+
+Notes:
+- `RS → HS`: tool extracts RSA public JWK (`n`, `e`), converts it to PEM, Base64-encodes PEM, places it into `oct` JWK `k` format, and signs with decoded raw key bytes (Burp-compatible flow).
+- `HS → RS`: tool requires RSA private JWK (`d` present) inside provided JWKS and signs as `RS*`.
 
 
 
