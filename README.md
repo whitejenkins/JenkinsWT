@@ -39,16 +39,7 @@ docker compose up --build
 
 ## Скриншоты
 
-> Заполните этот раздел вашими примерами.
 
-### Main UI
-![Main UI](./docs/screenshots/main-ui.png)
-
-### Attack Presets
-![Attack Presets](./docs/screenshots/attack-presets.png)
-
-### Generated Token Example
-![Generated Token Example](./docs/screenshots/generated-token.png)
 
 ## Disclaimer
 
