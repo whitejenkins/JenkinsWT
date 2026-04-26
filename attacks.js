@@ -94,7 +94,7 @@ async function generateJwkAttackToken(forceJwkSign) {
     }
 
     if (selectedAttack === 'algorithm-confusion') {
-      const direction = algConfusionDirection.value;
+      const direction = algConfusionDirection ? algConfusionDirection.value : 'rs-to-hs';
       const jwks = readJsonInput('{"keys":[...]}', 'Please provide full jwks.json content.');
       const sourceAlg = (baseHeader.alg || '').toUpperCase();
 
@@ -230,7 +230,7 @@ function configureInputForAttack(key) {
   jwkTools.classList.add('hidden');
   jkuTools.classList.add('hidden');
   kidTools.classList.add('hidden');
-  algorithmConfusionTools.classList.add('hidden');
+  if (algorithmConfusionTools) algorithmConfusionTools.classList.add('hidden');
   extraInput.classList.remove('hidden');
   extraInputLabel.classList.remove('hidden');
   extraInputHelp.classList.remove('hidden');
@@ -250,7 +250,7 @@ function configureInputForAttack(key) {
   }
   if (key === 'algorithm-confusion') {
     showInput('JWKS JSON', '{"keys":[{"kty":"RSA","n":"...","e":"AQAB","kid":"..."}]}', 'Required full jwks.json file. Tool extracts needed key data automatically.');
-    algorithmConfusionTools.classList.remove('hidden');
+    if (algorithmConfusionTools) algorithmConfusionTools.classList.remove('hidden');
     return;
   }
   if (key === 'kid-path-traversal') {
