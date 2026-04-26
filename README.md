@@ -35,10 +35,8 @@ docker compose up --build
 5. Заполните Attack-specific input (если нужен этим пресетом).
 6. Нажмите **Generate** и используйте полученный токен в тесте.
 
-> Важно: инструмент не подставляет значения claims за пользователя; всё берётся из введённого JWT и ваших входных данных.
-
 ## Скриншоты
-
+<img width="750" height="744" alt="image" src="https://github.com/user-attachments/assets/a44461e8-fa88-4bd9-bb67-bd5432df9a3f" />
 
 
 ## Disclaimer
